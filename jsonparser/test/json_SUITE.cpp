@@ -9,7 +9,7 @@ TEST(JsonParser, invalidEmptyFile)
     EXPECT_FALSE(json.isValidJson());
 }
 
-TEST(JsonParser, basicValidJson)
+TEST(JsonParser, step1Valid)
 {
     Json json{};
     json.readFile("../data/step1/valid.json");
@@ -49,4 +49,11 @@ TEST(JsonParser, step3invalid)
     Json json{};
     json.readFile("../data/step3/invalid.json");
     EXPECT_FALSE(json.isValidJson());
+}
+
+TEST(JsonParser, step3valid)
+{
+    Json json{};
+    json.readFile("../data/step3/valid.json");
+    EXPECT_TRUE(json.isValidJson());
 }

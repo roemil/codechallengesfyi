@@ -71,64 +71,36 @@ namespace
         return false;
     }
 
-
-
-    bool isValidObjectMember(std::string& str)
+std::string extractKey(std::string& str)
+{
+    const auto separator = str.find(":");
+    if(separator == std::string::npos)
     {
-        //std::cout << "parsing str: " << str << std::endl;
-        const auto pos = str.find(":");
-        if(pos == std::string::npos)
-        {
-            // No key - value -> invalid object
-            return false;
-        }
-
-        const std::string key = str.substr(0, pos);
-        if(!isValidString(key))
-        {
-            // key must be string
-            return false;
-        }
-
-        // consume key
-        str = str.substr(pos+1);
-
-        auto endPos = str.find(",");
-        if(endPos == std::string::npos)
-        {
-            if(!isValidValue(str))
-            {
-                return false;
-            }
-            // Consume str to break the outer loop.
-            str = str.substr(str.length());
-            return true;
-        }
-        const std::string value = str.substr(0, endPos);
-        if(!isValidValue(value))
-        {
-            return false;
-        }
-        // consume value
-        str = str.substr(value.length());
-        // only one comma left from the parsed string -> errounous trailing comma
-        if(str == ",")
-        {
-            return false;
-        }
-        str = str.substr(1); // update str to point to the next member by consuming the comma
-        return true;
+        return "";
     }
+    const std::string key = str.substr(0, separator);
+    str = str.substr(key.length());
+    return key;
 }
 
-bool Json::isValidJson() const
+std::string extractValue(std::string& str)
 {
-    if(content->empty())
+    const auto commaPos = str.find(",");
+    if(commaPos == std::string::npos)
     {
-        return false;
+        const std::string value = str;
+        str = str.substr(value.length());
+        return value;
     }
+    const std::string value = str.substr(0, commaPos);
+    str = str.substr(value.length());
+    return value;
+}
+
+bool isBracketsValid(const std::string& str)
+{
     std::stack<char> stack{};
-    for(const auto& c : *content)
+    for(const auto& c : str)
     {
         if(c == '{')
         {
@@ -142,39 +114,83 @@ bool Json::isValidJson() const
         {
             stack.push(c);
         }
-        else if(c == ']' && stack.top() == '{')
+        else if(c == ']' && stack.top() == '[')
         {
             stack.pop();
         }
     }
-    if(!stack.empty())
+    return stack.empty();
+}
+
+bool isValidObject(std::string& str)
+{
+    std::cout << "str: " << str << std::endl;
+    if(str.empty())
+    {
+        return false;
+    }
+    if(!isBracketsValid(str))
     {
         return false;
     }
 
-    // strip { and }
-    *content = content->substr(1);
-    *content = content->substr(0, content->length()-1);
+    // strip {/[ and }/]
+    str = str.substr(1);
+    str = str.substr(0, str.length()-1);
 
-    while(!content->empty())
+    while(!str.empty())
     {
-        //TODO:
-        // Here I can get the key and validate key
-        // Then I get the value and check if value is
-        // object or array or element. Then I can
-        // validate value based on that info.
+        // get key
+        const auto key = extractKey(str);
+        if(!isValidString(key))
+        {
+            return false;
+        }
+        if(str.empty())
+        {
+            // We parsed just a key but missing value
+            return false;
+        }
+        // consume ":" + space
+        str = str.substr(2);
 
-        if(!isValidObjectMember(*content))
+        auto value = extractValue(str);
+
+        // Check type of value
+        if(value.find("{") != std::string::npos)
+        {
+            if(!isValidObject(value))
+            {
+                return false;
+            }
+            // consume the comma
+            assert(str[0] == ',');
+            str.substr(1);
+        }
+
+        if(value.find("[") != std::string::npos)
+        {
+            // TODO: validate array
+        }
+
+        // Normal element to validate
+        if(!isValidValue(value))
         {
             return false;
         }
     }
     return true;
-    
-
-    // parse object - begins with { and ends with }, can be comma separated k:v pair.
-
-    
+}
 
 
+}
+
+
+bool Json::isValidJson() const
+{
+    if(content->empty())
+    {
+        return false;
+    }
+    return isValidObject(*content);
 }
