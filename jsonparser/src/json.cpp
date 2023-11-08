@@ -71,6 +71,8 @@ namespace
         return false;
     }
 
+
+
     bool isValidObjectMember(std::string& str)
     {
         //std::cout << "parsing str: " << str << std::endl;
@@ -136,6 +138,14 @@ bool Json::isValidJson() const
         {
             stack.pop();
         }
+        if(c == '[')
+        {
+            stack.push(c);
+        }
+        else if(c == ']' && stack.top() == '{')
+        {
+            stack.pop();
+        }
     }
     if(!stack.empty())
     {
@@ -143,13 +153,17 @@ bool Json::isValidJson() const
     }
 
     // strip { and }
-    const auto begin = content->find("{");
-    const auto end = content->find("}");
-    *content = content->substr(begin+1);
+    *content = content->substr(1);
     *content = content->substr(0, content->length()-1);
 
     while(!content->empty())
     {
+        //TODO:
+        // Here I can get the key and validate key
+        // Then I get the value and check if value is
+        // object or array or element. Then I can
+        // validate value based on that info.
+
         if(!isValidObjectMember(*content))
         {
             return false;
