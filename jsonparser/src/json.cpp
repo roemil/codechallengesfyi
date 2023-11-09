@@ -21,6 +21,7 @@ namespace
 {
     bool isValidString(const std::string& str)
     {
+        // TODO: use regexp...
         const auto first = str.find("\"");
         if(first == std::string::npos)
         {
@@ -36,6 +37,7 @@ namespace
 
     bool isValidDigit(const std::string& str)
     {
+        // TODO: Use regexp...
         try
         {
             const int TheInt = std::stoi(str);
@@ -122,6 +124,28 @@ bool isBracketsValid(const std::string& str)
     return stack.empty();
 }
 
+bool isValidArr(std::string& str)
+{
+    if(!isBracketsValid(str))
+    {
+        return false;
+    }
+
+    // strip [ and ]
+    str = str.substr(1);
+    str = str.substr(0, str.length()-1);
+    if(str.empty())
+    {
+        return true;
+    }
+    if(!isValidValue(str))
+    {
+        return false;
+    }
+    
+    return true;
+}
+
 bool isValidObject(std::string& str)
 {
     std::cout << "str: " << str << std::endl;
@@ -134,7 +158,7 @@ bool isValidObject(std::string& str)
         return false;
     }
 
-    // strip {/[ and }/]
+    // strip { and }
     str = str.substr(1);
     str = str.substr(0, str.length()-1);
 
@@ -167,14 +191,17 @@ bool isValidObject(std::string& str)
             assert(str[0] == ',');
             str.substr(1);
         }
-
-        if(value.find("[") != std::string::npos)
+        else if(value.find("[") != std::string::npos)
         {
             // TODO: validate array
+            if(!isValidArr(value))
+            {
+                std::cout << "invalid arr: " << value << std::endl;
+                return false;
+            }
         }
-
         // Normal element to validate
-        if(!isValidValue(value))
+        else if(!isValidValue(value))
         {
             return false;
         }
