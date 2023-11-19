@@ -1,80 +1,81 @@
 #include "json.h"
 
 #include <gtest/gtest.h>
+#include <stdexcept>
 
-TEST(JsonParser, invalidEmptyFile)
+using namespace json;
+
+struct JsonParser : ::testing::Test
 {
-    Json json{};
-    json.readFile("../data/step1/invalid.json");
-    EXPECT_FALSE(json.isValidJson());
+    parser parser{};
+};
+
+TEST_F(JsonParser, invalidEmptyFile)
+{
+    EXPECT_THROW(this->parser.isValidJson("../data/step1/invalid.json"), std::invalid_argument);
 }
 
-TEST(JsonParser, step1Valid)
+TEST_F(JsonParser, step1Valid)
 {
-    Json json{};
-    json.readFile("../data/step1/valid.json");
-    EXPECT_TRUE(json.isValidJson());
+    EXPECT_NO_THROW(this->parser.isValidJson("../data/step1/valid.json"));
 }
 
-TEST(JsonParser, step2Invalid)
+TEST_F(JsonParser, step2Invalid)
 {
-    Json json{};
-    json.readFile("../data/step2/invalid.json");
-    EXPECT_FALSE(json.isValidJson());
+    EXPECT_THROW(this->parser.isValidJson("../data/step2/invalid.json"), std::invalid_argument);
 }
 
-TEST(JsonParser, step2Invalid2)
+TEST_F(JsonParser, step2Invalid2)
 {
-    Json json{};
-    json.readFile("../data/step2/invalid2.json");
-    EXPECT_FALSE(json.isValidJson());
+    EXPECT_THROW(this->parser.isValidJson("../data/step2/invalid2.json"), std::invalid_argument);
 }
 
-TEST(JsonParser, step2Valid)
+TEST_F(JsonParser, step2Valid)
 {
-    Json json{};
-    json.readFile("../data/step2/valid.json");
-    EXPECT_TRUE(json.isValidJson());
+    EXPECT_NO_THROW(this->parser.isValidJson("../data/step2/valid.json"));
 }
 
-TEST(JsonParser, step2Valid2)
+TEST_F(JsonParser, step2Valid2)
 {
-    Json json{};
-    json.readFile("../data/step2/valid2.json");
-    EXPECT_TRUE(json.isValidJson());
+    EXPECT_NO_THROW(this->parser.isValidJson("../data/step2/valid2.json"));
 }
 
-TEST(JsonParser, step3invalid)
+TEST_F(JsonParser, step3invalid)
 {
-    Json json{};
-    json.readFile("../data/step3/invalid.json");
-    EXPECT_FALSE(json.isValidJson());
+    EXPECT_THROW(this->parser.isValidJson("../data/step3/invalid.json"), std::invalid_argument);
 }
 
-TEST(JsonParser, step3valid)
+TEST_F(JsonParser, step3valid)
 {
-    Json json{};
-    json.readFile("../data/step3/valid.json");
-    EXPECT_TRUE(json.isValidJson());
+    EXPECT_NO_THROW(this->parser.isValidJson("../data/step3/valid.json"));
 }
 
-TEST(JsonParser, step4valid)
+TEST_F(JsonParser, step4valid)
 {
-    Json json{};
-    json.readFile("../data/step4/valid.json");
-    EXPECT_TRUE(json.isValidJson());
+    EXPECT_NO_THROW(this->parser.isValidJson("../data/step4/valid.json"));
 }
 
-TEST(JsonParser, step4valid2)
+TEST_F(JsonParser, step4valid2)
 {
-    Json json{};
-    json.readFile("../data/step4/valid2.json");
-    EXPECT_TRUE(json.isValidJson());
+    EXPECT_NO_THROW(this->parser.isValidJson("../data/step4/valid2.json"));
 }
 
-TEST(JsonParser, step4invalid)
+TEST_F(JsonParser, step4valid3)
 {
-    Json json{};
-    json.readFile("../data/step4/invalid.json");
-    EXPECT_FALSE(json.isValidJson());
+    EXPECT_NO_THROW(this->parser.isValidJson("../data/step4/valid3.json"));
+}
+
+TEST_F(JsonParser, step4valid4)
+{
+    EXPECT_NO_THROW(this->parser.isValidJson("../data/step4/valid4.json"));
+}
+
+TEST_F(JsonParser, step4invalid)
+{
+    EXPECT_THROW(this->parser.isValidJson("../data/step4/invalid.json"), std::invalid_argument);
+}
+
+TEST_F(JsonParser, step4invalid2)
+{
+    EXPECT_THROW(this->parser.isValidJson("../data/step4/invalid2.json"), std::invalid_argument);
 }

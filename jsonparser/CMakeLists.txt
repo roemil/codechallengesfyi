@@ -21,6 +21,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_executable(
     json_SUITE
     src/json.cpp
+    src/lexer.cpp
     test/json_SUITE.cpp
 )
 target_link_libraries(

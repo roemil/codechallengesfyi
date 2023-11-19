@@ -1,14 +1,15 @@
 #pragma once
 
 #include <string>
-#include <fstream>
 #include <memory>
+#include <queue>
 
-struct Json
-{
-    void readFile(const std::string&);
-    bool isValidJson() const;
+namespace json {
+    struct parser
+    {
+        //void readFile(const std::string&);
+        void isValidJson(const std::string& filename) const;
 
-    std::string str{};
-    std::unique_ptr<std::string> content = nullptr;
-};
+        std::unique_ptr<std::queue<std::string>> content = nullptr;
+    };
+}

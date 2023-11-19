@@ -1,8 +1,11 @@
 #include "json.h"
 
+#include "lexer.h"
+
 #include <cstdio>
 #include <iterator>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <fstream>
 #include <iostream>
@@ -10,6 +13,105 @@
 #include <memory>
 #include <vector>
 
+namespace
+{
+    bool isValidString(const std::string& str) noexcept
+    {
+        const auto first = str.find('"');
+        const auto second = str.find_last_of('"');
+        if(first == second || first == std::string::npos || second == std::string::npos)
+        {
+            return false;
+        }
+        return true;
+    }
+    unsigned validateArray(const std::vector<std::string>& tokens, unsigned index)
+    {
+        if(tokens[index] == "," && tokens[index+1] == "]")
+        {
+            throw std::invalid_argument{"Expecting new object but got empty"};
+        }
+        const auto startingIndex = index;
+        std::cout << "Validating array val " << tokens[index] << std::endl;
+        if(tokens[++index] == ",")
+        {
+            return (index - startingIndex) + validateArray(tokens, index);
+        }
+        return index-startingIndex;
+
+    }
+    unsigned validateObject(const std::vector<std::string>& tokens, unsigned index)
+    {
+        if(tokens[index] == "," && tokens[index+1] == "}")
+        {
+            throw std::invalid_argument{"Expecting new object but got empty"};
+        }
+        if(tokens[index] == ",")
+        {
+            ++index;
+        }
+        const auto startingIndex = index;
+        std::cout << "Validating key " << tokens[index] << std::endl;
+
+        const auto& token = tokens[index];
+        if(token == "}")
+        {
+            ++index;
+            return index - startingIndex;
+        }
+        if(!isValidString(token))
+        {
+            throw std::invalid_argument{"Key is not a string"};
+        }
+        const auto separator = tokens[++index];
+        if(separator != ":")
+        {
+            throw std::invalid_argument{"No key/value combo. Got: " + separator};
+        }
+
+        //TODO: Here I need to validate value, eg if it is a list,
+        // is it valid?
+        ++index; // eat value -> value should be verified in lexer
+
+        if(tokens[++index] == ",")
+        {
+            return (index - startingIndex) + validateObject(tokens, index);
+        }
+        return (index - startingIndex);
+    }
+}
+
+namespace json
+{
+    void parser::isValidJson(const std::string& filename) const
+    {
+        Lexer lexer{filename};
+
+        auto tokens = lexer.getTokens();
+        if(!tokens)
+        {
+            throw std::invalid_argument{"No tokens?"};
+        }
+        for(unsigned index = 0; index < tokens->size(); ++index)
+        {
+            const auto& token = tokens->at(index);
+            if(token == "{")
+            {
+                const auto increment = validateObject(*tokens, ++index);
+                index += increment;
+            }
+            else if(token == "[")
+            {
+                const auto increment = validateArray(*tokens, ++index);
+                index += increment;
+            }
+        }
+
+    }
+}
+
+
+#if 0
 void Json::readFile(const std::string& filename)
 {
     std::ifstream file(filename);
@@ -221,3 +323,4 @@ bool Json::isValidJson() const
     }
     return isValidObject(*content);
 }
+#endif
