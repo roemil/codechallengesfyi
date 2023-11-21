@@ -1,0 +1,10 @@
+{
+    "key": "value",
+    "key-n": 101,
+    "key-o": {
+      "inner key object": {
+        "nested key": "nested value"
+      }
+    },
+    "key-l": ["list value1",]
+}

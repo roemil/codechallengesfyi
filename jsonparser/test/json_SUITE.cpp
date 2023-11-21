@@ -79,3 +79,13 @@ TEST_F(JsonParser, step4invalid2)
 {
     EXPECT_THROW(this->parser.isValidJson("../data/step4/invalid2.json"), std::invalid_argument);
 }
+
+TEST_F(JsonParser, step4invalid3)
+{
+    EXPECT_THROW(this->parser.isValidJson("../data/step4/invalid3.json"), std::invalid_argument);
+}
+
+TEST_F(JsonParser, step4invalid4)
+{
+    EXPECT_THROW(this->parser.isValidJson("../data/step4/invalid4.json"), std::invalid_argument);
+}

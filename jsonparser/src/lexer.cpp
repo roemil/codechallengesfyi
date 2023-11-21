@@ -15,7 +15,6 @@ Lexer::Lexer(const std::string& filename)
     std::ifstream file(filename);
     std::string str = std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
     str.erase(std::remove(str.begin(), str.end(), '\n'), str.cend());
-    str.erase(std::remove_if(str.begin(), str.end(), isspace), str.cend());
     lex(str);
 }
 
@@ -40,18 +39,25 @@ void Lexer::lex(const std::string& str)
     tokens = std::make_unique<std::vector<std::string>>();
     for(std::size_t i = 0; i < str.length(); ++i)
     {
-        const auto c = str[i];
-        if(isNumber(c))
         {
-            std::string intString{};
-            while(isNumber(str[i]))
+            const auto c = str[i];
+            if(isNumber(c))
             {
-                intString += str[i];
-                ++i;
+                std::string intString{};
+                while(isNumber(str[i]))
+                {
+                    intString += str[i];
+                    ++i;
+                }
+                tokens->emplace_back(intString);
+                if(str[i] == ',' || str[i] == ']' || str[i] == '}')
+                {
+                    tokens->emplace_back(std::string{str[i]});
+                }
+                continue;
             }
-            tokens->emplace_back(intString);
-            continue;
         }
+        const auto c = str[i];
         switch(c)
         {
             case ' ':
