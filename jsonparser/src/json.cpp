@@ -32,7 +32,6 @@ namespace
             throw std::invalid_argument{"Expecting new object but got empty"};
         }
         const auto startingIndex = index;
-        std::cout << "Validating array val " << tokens[index] << std::endl;
         if(tokens[++index] == ",")
         {
             index += validateArray(tokens, index);
@@ -47,10 +46,6 @@ namespace
         {
             ++index;
             return index - startingIndex;
-        }
-        if(tokens[index] == "," && tokens[index+1] == "}")
-        {
-            throw std::invalid_argument{"Expecting new object but got empty"};
         }
         if(tokens[index] == ",")
         {
