@@ -4,5 +4,5 @@
     "key-o": {
       "inner key": "inner value"
     },
-    "key-l": ["list value","list value"]
+    "key-l": ["list value1","list value2"]
 }

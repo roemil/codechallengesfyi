@@ -49,6 +49,10 @@ void Lexer::lex(const std::string& str)
                     intString += str[i];
                     ++i;
                 }
+                if(intString[0] == '0')
+                {
+                    throw std::invalid_argument{"Cannot have leading 0s"};
+                }
                 tokens->emplace_back(intString);
                 if(str[i] == ',' || str[i] == ']' || str[i] == '}')
                 {
@@ -92,7 +96,7 @@ void Lexer::lex(const std::string& str)
                 if(actualString == expectedString)
                 {
                     tokens->emplace_back(actualString);
-                    i+=5;
+                    i+=4;
                 }
                 else
                 {
@@ -107,7 +111,7 @@ void Lexer::lex(const std::string& str)
                 if(actualString == expectedString)
                 {
                     tokens->emplace_back(actualString);
-                    i+=4;
+                    i+=3;
                 }
                 else
                 {

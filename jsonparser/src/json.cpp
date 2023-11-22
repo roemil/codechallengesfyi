@@ -27,31 +27,68 @@ namespace
     }
     unsigned validateArray(const std::vector<std::string>& tokens, unsigned index)
     {
-        if(tokens[index] == "," && tokens[index+1] == "]")
+        if(tokens[index] != "[")
         {
-            throw std::invalid_argument{"Expecting new object but got empty"};
+            throw std::invalid_argument{"Arrays must begin with ["};
         }
+        ++index;
         const auto startingIndex = index;
-        if(tokens[++index] == ",")
+        if(tokens[index] == ",")
         {
-            index += validateArray(tokens, index);
+            throw std::invalid_argument{"Missing value"};
         }
+        if(tokens[index] == "]")
+        {
+            return ++index;
+        }
+        ++index;
+        while(tokens[index] == ",")
+        {
+            if(tokens[index+1] == "]")
+            {
+                throw std::invalid_argument{"Trailing comma"};
+            }
+            if(isValidString(tokens[index+1]))
+            {
+                ++index;
+                continue;
+            }
+            throw std::invalid_argument{"Expected valid string in array"};
+        }
+        if(isValidString(tokens[index]))
+        {
+            index += 2; // Consume last value and bracket
+            return index - startingIndex;
+        }
+        else if(tokens[index] != "]")
+        {
+            throw std::invalid_argument{"Expected closing bracket"};
+        }
+        ++index; // Consume last bracket
         return index-startingIndex;
 
     }
     unsigned validateObject(const std::vector<std::string>& tokens, unsigned index)
     {
+        std::cout << "object: " << tokens[index] << std::endl;
         const auto startingIndex = index;
+        // TODO: Should only start with {
+        if(tokens[index] == "," || tokens[index] == "{")
+        {
+            ++index;
+        }
+        else
+        {
+            throw std::invalid_argument{"Object must begin with { or ,"};
+        }
         if(tokens[index] == "}")
         {
             ++index;
             return index - startingIndex;
         }
-        if(tokens[index] == ",")
-        {
-            ++index;
-        }
+
         const auto& token = tokens[index];
+        std::cout << "key: " << token << std::endl;
         if(!isValidString(token))
         {
             throw std::invalid_argument{"Key is not a string"};
@@ -63,39 +100,51 @@ namespace
         }
 
         const auto value = tokens[++index];
+        std::cout << "value " << value << std::endl;
         switch(value[0])
         {
             case '{':
                 {
-                    const auto increment = validateObject(tokens, ++index);
-                    index += increment;
+                    index += validateObject(tokens, index);
                     break;
                 }
             case '[':
                 {
-                    const auto increment = validateArray(tokens, ++index);
-                    index += increment;
+                    index += validateArray(tokens, index);
                     break;
                 }
         }
+        if(isValidString(value) || tokens[index] == "}"
+        || value == "true" || value == "false")
+        {
+            // Consume the current value or the closing bracket.
+            ++index;
+        }
+        std::cout << "value2 " << tokens[index] << std::endl;
 
-        if(tokens[++index] == ",")
+        if(tokens[index] == ",")
         {
             switch (tokens[index+1][0])
             {
                 case '{':
-                    index += validateObject(tokens, ++index);
+                    std::cout << "Parsing nested object\n";
+                    index += validateObject(tokens, index);
                     break;
                 case '[':
-                    index += validateArray(tokens, ++index);
+                    index += validateArray(tokens, index);
                     break;
                 case '"':
-                    index += validateObject(tokens, ++index);
+                    index += validateObject(tokens, index);
                     break;
                 case '}':
                 case ']':
+                case ',':
                     throw std::invalid_argument{"Trailing comma"};
             }
+        }
+        if(tokens[index] == "}")
+        {
+            ++index;
         }
         return (index - startingIndex);
     }
@@ -112,20 +161,34 @@ namespace json
         {
             throw std::invalid_argument{"No tokens?"};
         }
+        if(tokens->at(0) != "{" && tokens->at(0) != "[")
+        {
+            throw std::invalid_argument{"JSON must begin as object or array"};
+        }
+        const auto lastIndex = tokens->size()-1;
+        if(tokens->at(lastIndex) != "}" && tokens->at(lastIndex) != "]")
+        {
+            throw std::invalid_argument{"JSON must end as object or array"};
+        }
         for(unsigned index = 0; index < tokens->size(); ++index)
         {
             const auto& token = tokens->at(index);
+            std::cout << "token: " << token << std::endl;
             if(token == "{")
             {
-                index += validateObject(*tokens, ++index);
+                index += validateObject(*tokens, index);
             }
             else if(token == "[")
             {
-                index += validateArray(*tokens, ++index);
+                index += validateArray(*tokens, index);
             }
             else if(token == ",")
             {
                 index += validateObject(*tokens, index);
+            }
+            else if(token == "]")
+            {
+                throw std::invalid_argument{"Trailing ]"};
             }
         }
 
