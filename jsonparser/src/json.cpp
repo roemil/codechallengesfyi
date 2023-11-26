@@ -255,11 +255,10 @@ namespace json
             {
                 index += validateObject(*tokens, index);
             }
-            if(token == "]" || (index < tokens->size() && tokens->at(index) == "]"))
+            if((index < tokens->size() && tokens->at(index) == "]"))
             {
                 throw std::invalid_argument{"Trailing ]"};
             }
         }
-
     }
 }   
