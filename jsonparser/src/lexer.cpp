@@ -1,12 +1,15 @@
 #include "lexer.h"
 
 #include <_ctype.h>
+#include <algorithm>
 #include <stdexcept>
 #include <string>
 #include <fstream>
 #include <memory>
 #include <iostream>
 #include <regex>
+#include <array>
+#include <cctype>
 
 namespace json
 {
@@ -14,7 +17,7 @@ Lexer::Lexer(const std::string& filename)
 {
     std::ifstream file(filename);
     std::string str = std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
-    str.erase(std::remove(str.begin(), str.end(), '\n'), str.cend());
+    //str.erase(std::remove(str.begin(), str.end(), '\n'), str.cend());
     lex(str);
 }
 
@@ -27,6 +30,52 @@ bool isNumber(const char input)
     return std::regex_match(std::string{input}, numberPattern);
 }
 
+bool isValidEscapeCharacterForJSON(const char ch)
+{
+    constexpr std::array<char, 8> validChars{'"', '\\', '/', 'b', 'f', 'n', 'r', 't'};
+    return (std::find(validChars.cbegin(), validChars.cend(), ch) != validChars.cend());
+}
+
+bool isValidString2(const std::string& str)
+{
+    for(std::string::size_type i = 0; i < str.length(); ++i)
+    {
+        if(str[i] == '\\')
+        {
+            ++i;
+            if(i > str.size())
+            {
+                throw std::invalid_argument{"Invalid string. Escape character must follow character"};
+            }
+            // Check if the next character is a valid escape character
+            if (isValidEscapeCharacterForJSON(str[i]))
+            {
+                continue;
+            }
+            else if (str[i] == 'u')
+            {
+                // Handle Unicode escape sequence (\uXXXX)
+                // Check for next 4 hexadecimal digits (\uXXXX)
+                for (int j = 0; j < 4; j++)
+                {
+                    i++;
+                    // Check if the next character doesn't exists
+                    // or if it's not a hexadecimal character
+                    if (i >= str.length() || !isxdigit(str[i]))
+                    {
+                        return false;
+                    }
+                }
+            }
+            else
+            {
+                // Any other character following a backslash is invalid
+                return false;
+            }
+        }
+    }
+    return true;
+}
 
 
 void Lexer::lex(const std::string& str)
@@ -41,15 +90,15 @@ void Lexer::lex(const std::string& str)
     {
         {
             const auto c = str[i];
-            if(isNumber(c))
+            if(isdigit(c) || c == '+' || c == '-')
             {
                 std::string intString{};
-                while(isNumber(str[i]))
+                while(isdigit(str[i]) || str[i] == 'x' || str[i] == '+' || str[i] == '-' || str[i] == 'e' || str[i] == '.')
                 {
                     intString += str[i];
                     ++i;
                 }
-                if(intString[0] == '0')
+                if(!isNumber(intString))
                 {
                     throw std::invalid_argument{"Cannot have leading 0s"};
                 }
@@ -65,6 +114,7 @@ void Lexer::lex(const std::string& str)
         switch(c)
         {
             case ' ':
+            case '\n':
                 break;
             case '{':
             case '}':
@@ -79,12 +129,34 @@ void Lexer::lex(const std::string& str)
                 std::string innerStr{};
                 innerStr += str[i];
                 ++i;
-                while(str[i] != '"' && i < str.length())
+                while(true)
                 {
+                    if(str[i] == '\\')
+                    {
+                        innerStr += str[i++];
+                        if(i < str.length())
+                        {
+                            // Add character after escape
+                            innerStr += str[i++];
+                        }
+                        continue;
+                    }
+                    else if (std::iscntrl(str[i]))
+                    {
+                        innerStr += str[i]; // add control character
+                        break;
+                    }
+                    if(str[i] == '"')
+                    {
+                        innerStr += str[i];
+                        break;
+                    }
                     innerStr += str[i++];
                 }
-                innerStr += '"';
-                // TODO: Deal with invalid strings
+                if(!isValidString2(innerStr))
+                {
+                    throw std::invalid_argument{"Invalid string"};
+                }
                 tokens->emplace_back(innerStr);
                 //++i; // Increment for last quote mark
                 break;
@@ -127,7 +199,7 @@ void Lexer::lex(const std::string& str)
                 if(actualString == expectedString)
                 {
                     tokens->emplace_back(actualString);
-                    i+=4;
+                    i+=3;
                 }
                 else
                 {

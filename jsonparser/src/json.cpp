@@ -3,6 +3,7 @@
 #include "lexer.h"
 
 #include <cstdio>
+#include <gtest/gtest.h>
 #include <iterator>
 #include <memory>
 #include <stdexcept>
@@ -13,7 +14,7 @@
 #include <memory>
 #include <vector>
 
-namespace
+namespace json
 {
     bool isValidString(const std::string& str) noexcept
     {
@@ -25,52 +26,108 @@ namespace
         }
         return true;
     }
-    unsigned validateArray(const std::vector<std::string>& tokens, unsigned index)
+    unsigned verifyKvPair(const std::vector<std::string>& tokens, unsigned index)
     {
-        if(tokens[index] != "[")
+        const auto startIndex = index;
+        const auto& token = tokens[++index];
+        if(!isValidString(token))
         {
-            throw std::invalid_argument{"Arrays must begin with ["};
+            throw std::invalid_argument{"Key is not a string"};
+        }
+        const auto separator = tokens[++index];
+        if(separator != ":")
+        {
+            throw std::invalid_argument{"No key/value combo. Got: " + separator};
         }
         ++index;
+        return index - startIndex;
+    }
+    unsigned parser::validateArray(const std::vector<std::string>& tokens, unsigned index)
+    {
+        ++depth;
+        if(depth >= 20)
+        {
+            throw std::invalid_argument{"Too deep"};
+        }
+        // TODO: Should only start with {
         const auto startingIndex = index;
+        if(tokens[index] == "," || tokens[index] == "[")
+        {
+            ++index;
+        }
+        else
+        {
+            throw std::invalid_argument{"Arrays must begin with [ or ,"};
+        }
         if(tokens[index] == ",")
         {
             throw std::invalid_argument{"Missing value"};
         }
         if(tokens[index] == "]")
         {
-            return ++index;
+            return (++index - startingIndex);
         }
-        ++index;
-        while(tokens[index] == ",")
+        while(tokens[index] != "]")
         {
-            if(tokens[index+1] == "]")
+            const auto& token = tokens[index];
+            switch (token[0])
             {
-                throw std::invalid_argument{"Trailing comma"};
+                case '{':
+                {
+                    index += validateObject(tokens, index);
+                    break;
+                }
+                case '[':
+                {
+                    index += validateArray(tokens, index);
+                }
+                case '"':
+                {
+                    ++index; // Normal value - validated in lexer.
+                    break;
+                }
+                case ',':
+                {
+                    if(tokens[index+1] == "]")
+                    {
+                        throw std::invalid_argument{"Trailing comma in array"};
+                    }
+                    ++index;
+                    break;
+                }
+                case 't':
+                case 'f':
+                case 'n':
+                    ++index;
+                    break;
+                default:
+                    if(Lexer::isNumber(tokens[index]))
+                    {
+                        ++index;
+                        continue;
+                    }
+                    else if(index >= tokens.size())
+                    {
+                        return (index - startingIndex);
+                    }
+                    else
+                    {
+                        throw std::invalid_argument{"Invalid value in arr: " + token};
+                    }
             }
-            if(isValidString(tokens[index+1]))
-            {
-                ++index;
-                continue;
-            }
-            throw std::invalid_argument{"Expected valid string in array"};
         }
-        if(isValidString(tokens[index]))
+
+        if(tokens[index] != "]")
         {
-            index += 2; // Consume last value and bracket
-            return index - startingIndex;
-        }
-        else if(tokens[index] != "]")
-        {
-            throw std::invalid_argument{"Expected closing bracket"};
+            throw std::invalid_argument{"Expected closing bracket " + tokens[index]};
         }
         ++index; // Consume last bracket
+        --depth;
         return index-startingIndex;
 
     }
-    unsigned validateObject(const std::vector<std::string>& tokens, unsigned index)
+    unsigned parser::validateObject(const std::vector<std::string>& tokens, unsigned index)
     {
-        std::cout << "object: " << tokens[index] << std::endl;
         const auto startingIndex = index;
         // TODO: Should only start with {
         if(tokens[index] == "," || tokens[index] == "{")
@@ -87,8 +144,8 @@ namespace
             return index - startingIndex;
         }
 
+        // TODO: Refactor to use verifyKvPair
         const auto& token = tokens[index];
-        std::cout << "key: " << token << std::endl;
         if(!isValidString(token))
         {
             throw std::invalid_argument{"Key is not a string"};
@@ -98,53 +155,66 @@ namespace
         {
             throw std::invalid_argument{"No key/value combo. Got: " + separator};
         }
-
-        const auto value = tokens[++index];
-        std::cout << "value " << value << std::endl;
-        switch(value[0])
+        ++index;
+        while(tokens[index] != "}")
         {
-            case '{':
-                {
-                    index += validateObject(tokens, index);
-                    break;
-                }
-            case '[':
-                {
-                    index += validateArray(tokens, index);
-                    break;
-                }
-        }
-        if(isValidString(value) || tokens[index] == "}"
-        || value == "true" || value == "false")
-        {
-            // Consume the current value or the closing bracket.
-            ++index;
-        }
-        std::cout << "value2 " << tokens[index] << std::endl;
-
-        if(tokens[index] == ",")
-        {
-            switch (tokens[index+1][0])
+            const auto value = tokens[index];
+ 
+            switch(value[0])
             {
                 case '{':
-                    std::cout << "Parsing nested object\n";
-                    index += validateObject(tokens, index);
+                {
+                    index += validateObject(tokens, index);   
                     break;
+                }
                 case '[':
+                {
                     index += validateArray(tokens, index);
                     break;
-                case '"':
-                    index += validateObject(tokens, index);
-                    break;
-                case '}':
-                case ']':
+                }
                 case ',':
-                    throw std::invalid_argument{"Trailing comma"};
+                {
+                    if(tokens[index+1] == "]" || tokens[index+1] == "}")
+                    {
+                        throw std::invalid_argument{"Trailing comma"};
+                    }
+                    else if(tokens[index+1] == "{")
+                    {
+                        index += validateObject(tokens, index);
+                        break;
+                    }
+                    index += verifyKvPair(tokens, index);
+                    break;
+                }
+                case '"':
+                case 't':
+                case 'f':
+                case 'n':
+                    {
+                        ++index;
+                        break;
+                    }
+                default:
+                    if(Lexer::isNumber(value))
+                    {
+                        ++index;
+                        continue;
+                    }
+                    else
+                    {
+                            throw std::invalid_argument{"Invalid value: " + value };
+                    }
             }
+            assert(index < tokens.size());
+
         }
+
         if(tokens[index] == "}")
         {
             ++index;
+        }
+        else {
+            throw std::invalid_argument{"Expected closing }"};
         }
         return (index - startingIndex);
     }
@@ -152,7 +222,7 @@ namespace
 
 namespace json
 {
-    void parser::isValidJson(const std::string& filename) const
+    void parser::isValidJson(const std::string& filename)
     {
         Lexer lexer{filename};
 
@@ -173,7 +243,6 @@ namespace json
         for(unsigned index = 0; index < tokens->size(); ++index)
         {
             const auto& token = tokens->at(index);
-            std::cout << "token: " << token << std::endl;
             if(token == "{")
             {
                 index += validateObject(*tokens, index);
@@ -186,7 +255,7 @@ namespace json
             {
                 index += validateObject(*tokens, index);
             }
-            else if(token == "]")
+            if(token == "]" || (index < tokens->size() && tokens->at(index) == "]"))
             {
                 throw std::invalid_argument{"Trailing ]"};
             }

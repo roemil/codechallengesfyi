@@ -165,8 +165,107 @@ TEST_F(JsonParser, testFail15)
     EXPECT_THROW(this->parser.isValidJson("../data/test/fail15.json"), std::invalid_argument);
 }
 
+TEST_F(JsonParser, testFail16)
+{
+    EXPECT_THROW(this->parser.isValidJson("../data/test/fail16.json"), std::invalid_argument);
+}
+
+TEST_F(JsonParser, testFail17)
+{
+    EXPECT_THROW(this->parser.isValidJson("../data/test/fail17.json"), std::invalid_argument);
+}
+
+TEST_F(JsonParser, testFail18)
+{
+    EXPECT_THROW(this->parser.isValidJson("../data/test/fail18.json"), std::invalid_argument);
+}
 
 TEST_F(JsonParser, testFail19)
 {
     EXPECT_THROW(this->parser.isValidJson("../data/test/fail19.json"), std::invalid_argument);
+}
+
+TEST_F(JsonParser, testFail20)
+{
+    EXPECT_THROW(this->parser.isValidJson("../data/test/fail20.json"), std::invalid_argument);
+}
+
+TEST_F(JsonParser, testFail21)
+{
+    EXPECT_THROW(this->parser.isValidJson("../data/test/fail21.json"), std::invalid_argument);
+}
+
+TEST_F(JsonParser, testFail22)
+{
+    EXPECT_THROW(this->parser.isValidJson("../data/test/fail22.json"), std::invalid_argument);
+}
+
+TEST_F(JsonParser, testFail23)
+{
+    EXPECT_THROW(this->parser.isValidJson("../data/test/fail23.json"), std::invalid_argument);
+}
+
+TEST_F(JsonParser, testFail24)
+{
+    EXPECT_THROW(this->parser.isValidJson("../data/test/fail24.json"), std::invalid_argument);
+}
+
+TEST_F(JsonParser, testFail25)
+{
+    EXPECT_THROW(this->parser.isValidJson("../data/test/fail25.json"), std::invalid_argument);
+}
+
+TEST_F(JsonParser, testFail26)
+{
+    EXPECT_THROW(this->parser.isValidJson("../data/test/fail26.json"), std::invalid_argument);
+}
+
+TEST_F(JsonParser, testFail27)
+{
+    EXPECT_THROW(this->parser.isValidJson("../data/test/fail27.json"), std::invalid_argument);
+}
+
+TEST_F(JsonParser, testFail28)
+{
+    EXPECT_THROW(this->parser.isValidJson("../data/test/fail28.json"), std::invalid_argument);
+}
+
+TEST_F(JsonParser, testFail29)
+{
+    EXPECT_THROW(this->parser.isValidJson("../data/test/fail29.json"), std::invalid_argument);
+}
+
+TEST_F(JsonParser, testFail30)
+{
+    EXPECT_THROW(this->parser.isValidJson("../data/test/fail30.json"), std::invalid_argument);
+}
+
+TEST_F(JsonParser, testFail31)
+{
+    EXPECT_THROW(this->parser.isValidJson("../data/test/fail31.json"), std::invalid_argument);
+}
+
+TEST_F(JsonParser, testFail32)
+{
+    EXPECT_THROW(this->parser.isValidJson("../data/test/fail32.json"), std::invalid_argument);
+}
+
+TEST_F(JsonParser, testFail33)
+{
+    EXPECT_THROW(this->parser.isValidJson("../data/test/fail33.json"), std::invalid_argument);
+}
+
+TEST_F(JsonParser, testPass1)
+{
+    EXPECT_NO_THROW(this->parser.isValidJson("../data/test/pass1.json"));
+}
+
+TEST_F(JsonParser, testPass2)
+{
+    EXPECT_NO_THROW(this->parser.isValidJson("../data/test/pass2.json"));
+}
+
+TEST_F(JsonParser, testPass3)
+{
+    EXPECT_NO_THROW(this->parser.isValidJson("../data/test/pass3.json"));
 }
