@@ -17,6 +17,7 @@ FetchContent_MakeAvailable(googletest)
 include_directories(include)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_BUILD_TYPE Debug)
 
 add_executable(
     json_SUITE

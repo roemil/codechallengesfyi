@@ -67,7 +67,7 @@ namespace json
         {
             return (++index - startingIndex);
         }
-        while(tokens[index] != "]")
+        while(index < tokens.size() && tokens[index] != "]")
         {
             const auto& token = tokens[index];
             switch (token[0])
@@ -98,17 +98,19 @@ namespace json
                 case 't':
                 case 'f':
                 case 'n':
+                {
                     ++index;
                     break;
+                }
                 default:
-                    if(Lexer::isNumber(tokens[index]))
+                    if(index >= tokens.size())
+                    {
+                        return (index - startingIndex);
+                    }
+                    else if(Lexer::isNumber(tokens[index]))
                     {
                         ++index;
                         continue;
-                    }
-                    else if(index >= tokens.size())
-                    {
-                        return (index - startingIndex);
                     }
                     else
                     {
@@ -117,10 +119,6 @@ namespace json
             }
         }
 
-        if(tokens[index] != "]")
-        {
-            throw std::invalid_argument{"Expected closing bracket " + tokens[index]};
-        }
         ++index; // Consume last bracket
         --depth;
         return index-startingIndex;
@@ -208,7 +206,6 @@ namespace json
             assert(index < tokens.size());
 
         }
-
         if(tokens[index] == "}")
         {
             ++index;
