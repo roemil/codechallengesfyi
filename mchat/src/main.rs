@@ -7,6 +7,16 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, SystemTime};
 
+/*
+TODO:
+First client chooses name - done
+then the authenticate with token - here we can check if the client tries to connect to often - not done
+Then we can rate limit messages from client - done
+... something else?
+UI for client perhaps
+
+*/
+
 fn get_name_from_client(stream: &Arc<TcpStream>) -> String {
     let _ = stream.as_ref().write(b"Enter your name: ").map_err(|err| {
         eprintln!("Failed to ask for name: {err}");
@@ -80,7 +90,6 @@ struct Client {
     last_message: SystemTime,
     strikes: u8,
     stream: Arc<TcpStream>,
-    is_connected: bool,
 }
 
 
@@ -201,7 +210,6 @@ fn is_allowed_to_send_msg(&mut self, sender: &SocketAddr) -> bool {
                                     name,
                                     last_message: now,
                                     strikes: 0,
-                                    is_connected: true,
                                 };
                                 self.clients.insert(stream.peer_addr().unwrap(), client);
                             }
