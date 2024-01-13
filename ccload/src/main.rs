@@ -111,11 +111,13 @@ async fn send_requests(id: usize, num_request: usize, url: String) -> LoadResult
                         "{id}: Unsuccessful response code: {}",
                         resp.status().as_str()
                     );
+                    continue;
                 }
             }
             Err(err) => {
                 result.fatal += 1;
                 eprintln!("Response error: {:?}", err);
+                continue;
             }
         }
         ttfbs.push(start.elapsed());
