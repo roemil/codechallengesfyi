@@ -141,7 +141,6 @@ async fn send_requests(id: usize, num_request: usize, url: String) -> LoadResult
 #[tokio::main]
 async fn main() { 
     let args = Args::parse();
-    println!("{:?}", args);
     let url = args.url;
 
     let num_request = match args.n {
