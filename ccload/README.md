@@ -1,8 +1,10 @@
 # HTTP Load Tester
-Low weight, single threaded load tester.
+Low weight, asynchronous and single threaded HTTP Server load tester.
 
 ## Usage
+```
 cargo run -- -u URL:PORT -n NUM_REQUESTS -c NUM_CONCURRENT_REQUESTS<br>
+```
 
 * NUM_REQUEST is the total amount of requests to send.
 * NUM_CONCURRENT_REQUESTS is the number of requests to send concurrently.
