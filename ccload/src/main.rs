@@ -15,14 +15,15 @@ struct Args {
     url: String,
 
     #[clap(short)]
-    n: Option<u16>,
+    n: Option<usize>,
 
     #[clap(short)]
-    c: Option<u16>,
+    c: Option<usize>,
 }
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Default, Clone, Copy)]
 struct LoadResult {
+    total_reqs: usize,
     successful: usize,
     failed: usize,
     fatal: usize,
@@ -39,27 +40,44 @@ struct LoadResult {
 impl LoadResult {
     fn new() -> LoadResult {
         LoadResult {
+            total_reqs: 0,
             successful: 0,
             failed: 0,
             fatal: 0,
             total_ttfb: Duration::from_millis(0),
             mean_ttfb: Duration::from_millis(0),
-            min_ttfb: Duration::from_millis(0),
-            max_ttfb: Duration::from_millis(0),
+            min_ttfb: Duration::from_millis(usize::MAX as u64),
+            max_ttfb: Duration::from_millis(usize::MIN as u64),
             total_ttlb: Duration::from_millis(0),
             mean_ttlb: Duration::from_millis(0),
-            min_ttlb: Duration::from_millis(0),
-            max_ttlb: Duration::from_millis(0),
+            min_ttlb: Duration::from_millis(usize::MAX as u64),
+            max_ttlb: Duration::from_millis(usize::MIN as u64),
         }
     }
-    // TODO: add pretty print
+}
+
+impl std::fmt::Display for LoadResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        writeln!(f, "{0: <12} {1: <10}", "Total Reqs: ", self.total_reqs)?;
+        writeln!(f, "{0: <12} {1: <10}", "Successful: ", self.successful)?;
+        writeln!(f, "{0: <12} {1: <10}", "Failed: ", self.failed)?;
+        writeln!(f, "{0: <12} {1: <10}", "Fatal: ", self.fatal)?;
+        writeln!(f, "{0: <12} {1: <10?}", "Total TTFB: ", self.total_ttfb)?;
+        writeln!(f, "{0: <12} {1: <10?}", "Mean  TTFB: ", self.mean_ttfb)?;
+        writeln!(f, "{0: <12} {1: <10?}", "Min   TTFB: ", self.min_ttfb)?;
+        writeln!(f, "{0: <12} {1: <10?}", "Max   TTFB: ", self.max_ttfb)?;
+        writeln!(f, "{0: <12} {1: <10?}", "Total TTlB: ", self.total_ttlb)?;
+        writeln!(f, "{0: <12} {1: <10?}", "Mean  TTlB: ", self.mean_ttlb)?;
+        writeln!(f, "{0: <12} {1: <10?}", "Min   TTlB: ", self.min_ttlb)?;
+        writeln!(f, "{0: <12} {1: <10?}", "Max   TTlB: ", self.max_ttlb)
+    }
 }
 
 impl Add for LoadResult {
     type Output = Self;
 
     fn add(mut self, rhs: Self) -> Self {
-        // TODO: Fix calculations.
+        self.total_reqs += rhs.total_reqs;
         self.successful += rhs.successful;
         self.failed += rhs.failed;
         self.fatal += rhs.fatal;
@@ -75,47 +93,49 @@ impl Add for LoadResult {
         self
     }
 }
-async fn send_requests(id: u16, num_request: u16, url: String) -> LoadResult {
-    let mut mresult = LoadResult::new();
+async fn send_requests(id: usize, num_request: usize, url: String) -> LoadResult {
+    let mut result = LoadResult::new();
     let mut ttfbs: Vec<Duration> = Vec::new();
     let mut ttlbs: Vec<Duration> = Vec::new();
+    result.total_reqs = num_request;
     for _ in 0..num_request {
         let start = Instant::now();
         let resp = reqwest::get(&url).await;
-        ttfbs.push(start.elapsed());
         match resp.as_ref() {
             Ok(resp) => {
                 if resp.status().is_success() {
-                    mresult.successful += 1;
-                    println!("{id}: Successful response code: {}", resp.status().as_str());
+                    result.successful += 1;
                 } else {
-                    mresult.failed += 1;
-                    println!(
+                    result.failed += 1;
+                    eprintln!(
                         "{id}: Unsuccessful response code: {}",
                         resp.status().as_str()
                     );
                 }
             }
             Err(err) => {
-                mresult.fatal += 1;
+                result.fatal += 1;
                 eprintln!("Response error: {:?}", err);
             }
         }
+        ttfbs.push(start.elapsed());
         let _ = reqwest::get(&url).await;
         ttlbs.push(start.elapsed());
         
     }
-    mresult.total_ttfb = ttfbs
+    result.total_ttfb = ttfbs
         .iter()
         .fold(Duration::from_millis(0), |acc, x| acc + *x);
-    mresult.max_ttfb = *ttfbs.iter().max().unwrap();
-    mresult.min_ttfb = *ttfbs.iter().min().unwrap();
-    mresult.total_ttfb = ttlbs
+    result.max_ttfb = *ttfbs.iter().max().expect("No max value calculated");
+    result.min_ttfb = *ttfbs.iter().min().expect("No min value calculated");
+    result.mean_ttfb = result.total_ttfb.div_f32(num_request as f32);
+    result.total_ttlb = ttlbs
         .iter()
         .fold(Duration::from_millis(0), |acc, x| acc + *x);
-    mresult.max_ttlb = *ttlbs.iter().max().unwrap();
-    mresult.min_ttlb = *ttlbs.iter().min().unwrap();
-    return mresult;
+    result.max_ttlb = *ttlbs.iter().max().expect("No max value calculated");
+    result.min_ttlb = *ttlbs.iter().min().expect("No min value calculated");
+    result.mean_ttlb = result.total_ttlb.div_f32(num_request as f32);
+    return result;
 }
 
 #[tokio::main]
@@ -143,12 +163,12 @@ async fn main() {
         });
     }
 
-    let mut outputs = Vec::with_capacity(num_threads as usize);
+    let mut outputs = Vec::with_capacity(num_threads);
     while let Some(res) = set.join_next().await {
         outputs.push(res.unwrap());
     }
 
     let final_res = outputs.iter().fold(LoadResult::new(), |acc, x| acc + *x);
-    println!("{:?}", final_res);
+    println!("{}", final_res);
 
 }
