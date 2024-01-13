@@ -1,8 +1,8 @@
 use clap::Parser;
-use std::sync::{Arc, Mutex};
-use std::thread;
+use tokio::task::JoinSet;
+use std::cmp;
+use std::ops::Add;
 use std::time::{Duration, Instant};
-use rand::Rng;
 
 #[derive(Parser, Debug)]
 #[clap(
@@ -21,15 +21,19 @@ struct Args {
     c: Option<u16>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default, Clone, Copy)]
 struct LoadResult {
     successful: usize,
     failed: usize,
     fatal: usize,
-    total_resp_time: Duration,
-    mean_resp_time: Duration,
-    min_resp_time: Duration,
-    max_resp_time: Duration,
+    total_ttfb: Duration,
+    mean_ttfb: Duration,
+    min_ttfb: Duration,
+    max_ttfb: Duration,
+    total_ttlb: Duration,
+    mean_ttlb: Duration,
+    min_ttlb: Duration,
+    max_ttlb: Duration,
 }
 
 impl LoadResult {
@@ -38,33 +42,49 @@ impl LoadResult {
             successful: 0,
             failed: 0,
             fatal: 0,
-            total_resp_time: Duration::from_millis(0),
-            mean_resp_time: Duration::from_millis(0),
-            min_resp_time: Duration::from_millis(0),
-            max_resp_time: Duration::from_millis(0),
+            total_ttfb: Duration::from_millis(0),
+            mean_ttfb: Duration::from_millis(0),
+            min_ttfb: Duration::from_millis(0),
+            max_ttfb: Duration::from_millis(0),
+            total_ttlb: Duration::from_millis(0),
+            mean_ttlb: Duration::from_millis(0),
+            min_ttlb: Duration::from_millis(0),
+            max_ttlb: Duration::from_millis(0),
         }
     }
+    // TODO: add pretty print
 }
 
-fn send_requests(id: u16, num_request: u16, url: String, result: Arc<Mutex<LoadResult>>) {
-    let mut resp_time: Vec<Duration> = Vec::new();
-    for i in 0..num_request {
-        let resp: Result<reqwest::blocking::Response, reqwest::Error>;
-        let new_url: String;
-        let mut rng = rand::thread_rng();
-        let shoud_be_successful = rng.gen_range(0..num_request)  as f32 / num_request as f32;
-        if shoud_be_successful > 0.1 {
-            new_url = url.clone();
-        } else {
-            new_url = url.clone() + "/some_non_existent_path";
-        }
+impl Add for LoadResult {
+    type Output = Self;
+
+    fn add(mut self, rhs: Self) -> Self {
+        // TODO: Fix calculations.
+        self.successful += rhs.successful;
+        self.failed += rhs.failed;
+        self.fatal += rhs.fatal;
+        self.total_ttfb += rhs.total_ttfb;
+        self.mean_ttfb = (self.mean_ttfb + rhs.mean_ttfb)/2;
+        self.min_ttfb = cmp::min(self.min_ttfb, rhs.min_ttfb);
+        self.max_ttfb = cmp::max(self.max_ttfb, rhs.max_ttfb);
+
+        self.total_ttlb += rhs.total_ttlb;
+        self.mean_ttlb = (self.mean_ttlb + rhs.mean_ttlb)/2;
+        self.min_ttlb = cmp::min(self.min_ttlb, rhs.min_ttlb);
+        self.max_ttlb = cmp::max(self.max_ttlb, rhs.max_ttlb);
+        self
+    }
+}
+async fn send_requests(id: u16, num_request: u16, url: String) -> LoadResult {
+    let mut mresult = LoadResult::new();
+    let mut ttfbs: Vec<Duration> = Vec::new();
+    let mut ttlbs: Vec<Duration> = Vec::new();
+    for _ in 0..num_request {
         let start = Instant::now();
-        resp = reqwest::blocking::get(new_url);
-        let duration = start.elapsed();
-        resp_time.push(duration);
+        let resp = reqwest::get(&url).await;
+        ttfbs.push(start.elapsed());
         match resp.as_ref() {
             Ok(resp) => {
-                let mut mresult = result.lock().expect("Expected to lock");
                 if resp.status().is_success() {
                     mresult.successful += 1;
                     println!("{id}: Successful response code: {}", resp.status().as_str());
@@ -77,27 +97,29 @@ fn send_requests(id: u16, num_request: u16, url: String, result: Arc<Mutex<LoadR
                 }
             }
             Err(err) => {
-                let mut mresult = result.lock().expect("Expected to lock");
                 mresult.fatal += 1;
                 eprintln!("Response error: {:?}", err);
             }
         }
+        let _ = reqwest::get(&url).await;
+        ttlbs.push(start.elapsed());
+        
     }
-    let mut mresult = result.lock().unwrap();
-    mresult.total_resp_time += resp_time
+    mresult.total_ttfb = ttfbs
         .iter()
         .fold(Duration::from_millis(0), |acc, x| acc + *x);
-    let max_resp_time = resp_time.iter().max().unwrap();
-    if mresult.max_resp_time < *max_resp_time {
-        mresult.max_resp_time = *max_resp_time;
-    }
-    let min_resp_time = resp_time.iter().min().unwrap();
-    if mresult.min_resp_time < *min_resp_time {
-        mresult.min_resp_time = *min_resp_time;
-    }
+    mresult.max_ttfb = *ttfbs.iter().max().unwrap();
+    mresult.min_ttfb = *ttfbs.iter().min().unwrap();
+    mresult.total_ttfb = ttlbs
+        .iter()
+        .fold(Duration::from_millis(0), |acc, x| acc + *x);
+    mresult.max_ttlb = *ttlbs.iter().max().unwrap();
+    mresult.min_ttlb = *ttlbs.iter().min().unwrap();
+    return mresult;
 }
 
-fn main() {
+#[tokio::main]
+async fn main() { 
     let args = Args::parse();
     println!("{:?}", args);
     let url = args.url;
@@ -111,22 +133,22 @@ fn main() {
         None => 1,
     };
     assert!(num_request >= num_threads);
-    let num_req_per_thread = num_request / num_threads;
-    let mut children = vec![];
-    let results = Arc::new(Mutex::new(LoadResult::new()));
+    let num_req_per_thread = num_request.clone() / num_threads.clone();
+    let mut set = JoinSet::new();
     for id in 0..num_threads {
-        let url_copied = url.clone();
-        let result_copy = results.clone();
-        children.push(thread::spawn(move || {
-            send_requests(id, num_req_per_thread, url_copied, result_copy)
-        }));
+        let url_clone = url.clone();
+        set.spawn(async move {
+            let res = send_requests(id, num_req_per_thread, url_clone).await;
+            res
+        });
     }
 
-    for child in children {
-        // Wait for the thread to finish. Returns a result.
-        let _ = child.join();
+    let mut outputs = Vec::with_capacity(num_threads as usize);
+    while let Some(res) = set.join_next().await {
+        outputs.push(res.unwrap());
     }
-    let mut mresult = results.lock().unwrap();
-    mresult.mean_resp_time = mresult.total_resp_time.div_f32(num_request as f32);
-    println!("Result: {:?}", mresult);
+
+    let final_res = outputs.iter().fold(LoadResult::new(), |acc, x| acc + *x);
+    println!("{:?}", final_res);
+
 }
