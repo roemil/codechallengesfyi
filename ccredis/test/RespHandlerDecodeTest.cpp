@@ -6,35 +6,6 @@
 
 #include "RespHandler.h"
 
-// namespace {
-// void appendCRLF(std::vector<char>& vec)
-// {
-//     vec.push_back(static_cast<char>(0x0d));
-//     vec.push_back(static_cast<char>(0x0A));
-// }
-
-// void appendChars(std::vector<char>& output, std::string_view input)
-// {
-//     for (const auto& c : input) {
-//         output.push_back(c);
-//     }
-// }
-
-// } // namespace
-
-/*
-
-Test list
-
-For Simple Strings, the first byte of the reply is "+"
-For Errors, the first byte of the reply is "-"
-For Integers, the first byte of the reply is ":"
-For Bulk Strings, the first byte of the reply is "$"
-For Arrays, the first byte of the reply is "*"
-
-
-*/
-
 class RespHandlerDecodeTest : public testing::Test {
 protected:
     RespHandler rh {};

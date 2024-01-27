@@ -11,8 +11,8 @@
 namespace {
 void appendCRLF(std::vector<uint8_t>& vec)
 {
-    vec.push_back(static_cast<uint8_t>(0x0d));
-    vec.push_back(static_cast<uint8_t>(0x0A));
+    vec.push_back('\r');
+    vec.push_back('\n');
 }
 
 void appendChars(std::vector<uint8_t>& output, std::string_view input)
@@ -23,19 +23,6 @@ void appendChars(std::vector<uint8_t>& output, std::string_view input)
 }
 
 } // namespace
-
-/*
-
-Test list
-
-For Simple Strings, the first byte of the reply is "+"
-For Errors, the first byte of the reply is "-"
-For Integers, the first byte of the reply is ":"
-For Bulk Strings, the first byte of the reply is "$"
-For Arrays, the first byte of the reply is "*"
-
-
-*/
 
 class RespHandlerEncodeTest : public testing::Test {
 protected:
