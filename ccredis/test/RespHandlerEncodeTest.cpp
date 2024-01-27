@@ -126,3 +126,10 @@ TEST_F(RespHandlerEncodeTest, ArraySingleBulkString)
     appendCRLF(result);
     EXPECT_EQ(result, rh.getBuffer());
 }
+
+TEST_F(RespHandlerEncodeTest, EmptyArray)
+{
+    rh.beginArray(0);
+    std::vector<uint8_t> result { '*', 0, '\r', '\n'};
+    EXPECT_EQ(result, rh.getBuffer());
+}
