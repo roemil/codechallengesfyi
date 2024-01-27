@@ -61,7 +61,7 @@ TEST_F(RespHandlerEncodeTest, SimpleString)
 TEST_F(RespHandlerEncodeTest, BulkString)
 {
     rh.appendBulkstring("OK");
-    std::vector<uint8_t> result { '$', static_cast<uint8_t>(2) , '\r', '\n' , 'O', 'K' };
+    std::vector<uint8_t> result { '$', static_cast<uint8_t>(2), '\r', '\n', 'O', 'K' };
     appendCRLF(result);
     EXPECT_EQ(result, rh.getBuffer());
 }
@@ -117,7 +117,7 @@ TEST_F(RespHandlerEncodeTest, ArraySingleInt)
     constexpr std::string_view n = "1";
     rh.beginArray(1);
     rh.appendInt(n);
-    std::vector<uint8_t> result { '*' , 1, '\r' , '\n' , ':', '1'};
+    std::vector<uint8_t> result { '*', 1, '\r', '\n', ':', '1' };
     appendCRLF(result);
     EXPECT_EQ(result, rh.getBuffer());
 }
@@ -126,7 +126,7 @@ TEST_F(RespHandlerEncodeTest, ArraySingleSimpleString)
 {
     rh.beginArray(1);
     rh.appendSimpleString("OK");
-    std::vector<uint8_t> result { '*' , 1, '\r' , '\n' , '+', 'O', 'K'};
+    std::vector<uint8_t> result { '*', 1, '\r', '\n', '+', 'O', 'K' };
     appendCRLF(result);
     EXPECT_EQ(result, rh.getBuffer());
 }
@@ -135,7 +135,7 @@ TEST_F(RespHandlerEncodeTest, ArraySingleBulkString)
 {
     rh.beginArray(1);
     rh.appendBulkstring("OK");
-    std::vector<uint8_t> result { '*' , 1, '\r' , '\n' , '$', 2, '\r' , '\n'  ,'O', 'K'};
+    std::vector<uint8_t> result { '*', 1, '\r', '\n', '$', 2, '\r', '\n', 'O', 'K' };
     appendCRLF(result);
     EXPECT_EQ(result, rh.getBuffer());
 }

@@ -32,7 +32,8 @@ void RespHandler::appendSimpleString(const std::string_view str)
     appendCRLF();
 }
 
-void RespHandler::appendBulkstring(const std::string_view str){
+void RespHandler::appendBulkstring(const std::string_view str)
+{
     buffer.push_back(static_cast<uint8_t>(Prefix::BULK_STRING));
     buffer.push_back(str.length());
     appendCRLF();
@@ -41,7 +42,8 @@ void RespHandler::appendBulkstring(const std::string_view str){
     appendCRLF();
 }
 
-void RespHandler::appendNull(){
+void RespHandler::appendNull()
+{
     buffer.push_back(static_cast<uint8_t>(Prefix::BULK_STRING));
     buffer.push_back(-1);
     appendCRLF();
@@ -63,7 +65,8 @@ void RespHandler::appendInt(const std::string_view n)
     appendCRLF();
 }
 
-void RespHandler::beginArray(const unsigned numElements){
+void RespHandler::beginArray(const unsigned numElements)
+{
     buffer.push_back(static_cast<uint8_t>(Prefix::ARRAY));
     buffer.push_back(static_cast<uint8_t>(numElements));
     appendCRLF();
@@ -85,7 +88,7 @@ constexpr std::string_view RespHandler::decodeBulkString(const std::string_view 
         throw std::invalid_argument { "Missing CRLF in Simple String" };
     }
 
-    if(str.substr(1, lengthDelim-1) == "-1") {
+    if (str.substr(1, lengthDelim - 1) == "-1") {
         return "null";
     }
 
@@ -123,9 +126,10 @@ constexpr std::string_view RespHandler::decodeInt(const std::string_view str)
     return decodedInt;
 }
 
-constexpr std::string_view RespHandler::decodeArray(const std::string_view str){
+constexpr std::string_view RespHandler::decodeArray(const std::string_view str)
+{
     const auto arrLenDel = str.find_first_of("\r\n");
-    int arrLen{};
+    int arrLen {};
     std::from_chars_result convertArrLenRes = std::from_chars(str.data() + 1, str.data() + arrLenDel, arrLen);
     if (convertArrLenRes.ec == std::errc::invalid_argument) {
         throw std::invalid_argument { "Invalid length of bulk string. lengthDelim: " + std::string { str[arrLenDel] } };
@@ -133,7 +137,7 @@ constexpr std::string_view RespHandler::decodeArray(const std::string_view str){
 
     assert(arrLen == 1); // TODO: Accept arrays longer than 1 :)
     const auto endDelim = str.find_last_of("\r\n");
-    return decode(str.substr(arrLenDel + 2, endDelim - 1 - (endDelim + 2) ));
+    return decode(str.substr(arrLenDel + 2, endDelim - 1 - (endDelim + 2)));
 }
 
 std::string_view RespHandler::decode(const std::string_view str)
