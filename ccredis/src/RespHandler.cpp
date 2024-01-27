@@ -1,5 +1,7 @@
 #include "RespHandler.h"
 
+#include <_types/_uint8_t.h>
+#include <cassert>
 #include <charconv>
 #include <stdexcept>
 #include <string>
@@ -61,6 +63,12 @@ void RespHandler::appendInt(const std::string_view n)
     appendCRLF();
 }
 
+void RespHandler::beginArray(const unsigned numElements){
+    buffer.push_back(static_cast<uint8_t>(Prefix::ARRAY));
+    buffer.push_back(static_cast<uint8_t>(numElements));
+    appendCRLF();
+}
+
 constexpr std::string_view RespHandler::decodeSimpleString(const std::string_view str)
 {
     const auto crlfPos = str.find("\r\n");
@@ -115,6 +123,19 @@ constexpr std::string_view RespHandler::decodeInt(const std::string_view str)
     return decodedInt;
 }
 
+constexpr std::string_view RespHandler::decodeArray(const std::string_view str){
+    const auto arrLenDel = str.find_first_of("\r\n");
+    int arrLen{};
+    std::from_chars_result convertArrLenRes = std::from_chars(str.data() + 1, str.data() + arrLenDel, arrLen);
+    if (convertArrLenRes.ec == std::errc::invalid_argument) {
+        throw std::invalid_argument { "Invalid length of bulk string. lengthDelim: " + std::string { str[arrLenDel] } };
+    }
+
+    assert(arrLen == 1); // TODO: Accept arrays longer than 1 :)
+    const auto endDelim = str.find_last_of("\r\n");
+    return decode(str.substr(arrLenDel + 2, endDelim - 1 - (endDelim + 2) ));
+}
+
 std::string_view RespHandler::decode(const std::string_view str)
 {
     const auto prefix = static_cast<Prefix>(str[0]);
@@ -127,6 +148,8 @@ std::string_view RespHandler::decode(const std::string_view str)
         return decodeInt(str);
     case Prefix::BULK_STRING:
         return decodeBulkString(str);
+    case Prefix::ARRAY:
+        return decodeArray(str);
     }
     return "";
 }

@@ -86,3 +86,8 @@ TEST_F(RespHandlerDecodeTest, Null)
 {
     EXPECT_EQ(std::string_view { "null" }, rh.decode("$-1\r\n"));
 }
+
+TEST_F(RespHandlerDecodeTest, ArraySingleInt)
+{
+    EXPECT_EQ(std::string_view { "1" }, rh.decode("*1\r\n:1\r\n"));
+}
