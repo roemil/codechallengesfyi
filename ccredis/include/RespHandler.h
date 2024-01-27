@@ -12,13 +12,15 @@ enum class Prefix : char {
 
 class RespHandler {
 public:
-    void appendSimpeString(const std::string_view str);
+    void appendSimpleString(const std::string_view str);
     void appendError(const std::string_view str);
     void appendInt(const std::string_view n);
+    void appendBulkstring(const std::string_view str);
+    void appendNull();
 
     [[nodiscard]] static std::string_view decode(const std::string_view str);
 
-    const std::vector<char>& getBuffer() const;
+    const std::vector<uint8_t>& getBuffer() const;
 
 private:
     void appendCRLF();
@@ -28,5 +30,5 @@ private:
     static constexpr std::string_view decodeInt(const std::string_view str);
     static constexpr std::string_view decodeBulkString(const std::string_view str);
     // TODO: Replace with a output stringstream?
-    std::vector<char> buffer {};
+    std::vector<uint8_t> buffer {};
 };

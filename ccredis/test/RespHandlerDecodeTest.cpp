@@ -81,3 +81,8 @@ TEST_F(RespHandlerDecodeTest, BulkStringLonger)
 {
     EXPECT_EQ(std::string_view { "hello world" }, rh.decode("$11\r\nhello world\r\n"));
 }
+
+TEST_F(RespHandlerDecodeTest, Null)
+{
+    EXPECT_EQ(std::string_view { "null" }, rh.decode("$-1\r\n"));
+}

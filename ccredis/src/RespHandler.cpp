@@ -8,7 +8,7 @@
 void RespHandler::appendChars(const std::string_view str)
 {
     for (const auto& c : str) {
-        buffer.push_back(static_cast<char>(c));
+        buffer.push_back(static_cast<uint8_t>(c));
     }
 }
 
@@ -18,30 +18,45 @@ void RespHandler::appendCRLF()
     buffer.push_back('\n');
 }
 
-void RespHandler::appendSimpeString(const std::string_view str)
+void RespHandler::appendSimpleString(const std::string_view str)
 {
-    buffer.push_back('+');
+    buffer.push_back(static_cast<uint8_t>(Prefix::SIMPLE_STRING));
     for (const auto& c : str) {
         if (c == '\r' || c == '\n') {
             throw std::invalid_argument("String must not contain CR or LF!");
         }
-        buffer.push_back(static_cast<char>(c));
+        buffer.push_back(static_cast<uint8_t>(c));
     }
+    appendCRLF();
+}
+
+void RespHandler::appendBulkstring(const std::string_view str){
+    buffer.push_back(static_cast<uint8_t>(Prefix::BULK_STRING));
+    buffer.push_back(str.length());
+    appendCRLF();
+    // TODO: Should probably do something like buf.writeu8() or writeu32() to handle wide chars
+    appendChars(str);
+    appendCRLF();
+}
+
+void RespHandler::appendNull(){
+    buffer.push_back(static_cast<uint8_t>(Prefix::BULK_STRING));
+    buffer.push_back(-1);
     appendCRLF();
 }
 
 void RespHandler::appendError(const std::string_view str)
 {
-    buffer.push_back('-');
+    buffer.push_back(static_cast<uint8_t>(Prefix::ERROR));
     for (const auto& c : str) {
-        buffer.push_back(static_cast<char>(c));
+        buffer.push_back(static_cast<uint8_t>(c));
     }
     appendCRLF();
 }
 
 void RespHandler::appendInt(const std::string_view n)
 {
-    buffer.push_back(':');
+    buffer.push_back(static_cast<uint8_t>(Prefix::INTEGER));
     appendChars(n);
     appendCRLF();
 }
@@ -61,6 +76,11 @@ constexpr std::string_view RespHandler::decodeBulkString(const std::string_view 
     if (lengthDelim == std::string::npos) {
         throw std::invalid_argument { "Missing CRLF in Simple String" };
     }
+
+    if(str.substr(1, lengthDelim-1) == "-1") {
+        return "null";
+    }
+
     int length {};
     std::from_chars_result result = std::from_chars(str.data() + 1, str.data() + lengthDelim, length);
     if (result.ec == std::errc::invalid_argument) {
@@ -111,4 +131,4 @@ std::string_view RespHandler::decode(const std::string_view str)
     return "";
 }
 
-const std::vector<char>& RespHandler::getBuffer() const { return buffer; }
+const std::vector<uint8_t>& RespHandler::getBuffer() const { return buffer; }
