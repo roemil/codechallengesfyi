@@ -130,6 +130,6 @@ TEST_F(RespHandlerEncodeTest, ArraySingleBulkString)
 TEST_F(RespHandlerEncodeTest, EmptyArray)
 {
     rh.beginArray(0);
-    std::vector<uint8_t> result { '*', 0, '\r', '\n'};
+    std::vector<uint8_t> result { '*', 0, '\r', '\n' };
     EXPECT_EQ(result, rh.getBuffer());
 }

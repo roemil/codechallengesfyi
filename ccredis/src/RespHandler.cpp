@@ -3,6 +3,7 @@
 #include <_types/_uint8_t.h>
 #include <cassert>
 #include <charconv>
+#include <iostream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -72,24 +73,29 @@ void RespHandler::beginArray(const unsigned numElements)
     appendCRLF();
 }
 
-constexpr std::string_view RespHandler::decodeSimpleString(const std::string_view str)
+std::pair<size_t, std::string_view> RespHandler::decodeSimpleString(const std::string_view str)
 {
+    std::cout << __PRETTY_FUNCTION__ << "str: " << str << "\n";
+
     const auto crlfPos = str.find("\r\n");
+
     if (crlfPos == std::string::npos) {
         throw std::invalid_argument { "Missing CRLF in Simple String" };
     }
-    return str.substr(1, crlfPos - 1);
+    return {crlfPos, str.substr(1, crlfPos - 1)};
 }
 
-constexpr std::string_view RespHandler::decodeBulkString(const std::string_view str)
+std::pair<size_t, std::string_view> RespHandler::decodeBulkString(const std::string_view str)
 {
+    std::cout << __PRETTY_FUNCTION__ << "str: " << str << "\n";
+
     const auto lengthDelim = str.find_first_of("\r\n");
     if (lengthDelim == std::string::npos) {
         throw std::invalid_argument { "Missing CRLF in Simple String" };
     }
 
     if (str.substr(1, lengthDelim - 1) == "-1") {
-        return "null";
+        return {lengthDelim, "null"};
     }
 
     int length {};
@@ -98,36 +104,48 @@ constexpr std::string_view RespHandler::decodeBulkString(const std::string_view 
         throw std::invalid_argument { "Invalid length of bulk string. lengthDelim: " + std::string { str[lengthDelim] } };
     }
 
-    const auto endDelim = str.find_last_of("\r\n");
+    std::cout << "[INFO]: Length: " << std::to_string(length) << "\n";
+
+    //const auto endDelim = str.find_last_of("\r\n");
+    //const auto endDelim = lengthDelim+2+length;//str.find("\r\n", lengthDelim+3);
+    const auto endDelim = str.find("\r\n", lengthDelim+3);
     if (endDelim == lengthDelim) {
         throw std::invalid_argument { "Invalid format. End delimiter same as length delimiter" };
     }
-    return str.substr(lengthDelim + 2, endDelim - 1 - (lengthDelim + 2));
+    std::cout << "[INFO]: lengthDelim: " << std::to_string(lengthDelim) << "\n";
+    std::cout << "[INFO]: endDelim: " << std::to_string(endDelim) << "\n";
+    return {endDelim, str.substr(lengthDelim + 2, length)};
 }
 
-constexpr std::string_view RespHandler::decodeError(const std::string_view str)
+std::pair<size_t, std::string_view> RespHandler::decodeError(const std::string_view str)
 {
+    std::cout << __PRETTY_FUNCTION__ << "str: " << str << "\n";
+
     const auto crlfPos = str.find("\r\n");
     if (crlfPos == std::string::npos) {
         throw std::invalid_argument { "Missing CRLF in Simple String" };
     }
 
-    return str.substr(1, crlfPos - 1);
+    return {crlfPos, str.substr(1, crlfPos - 1)};
 }
 
-constexpr std::string_view RespHandler::decodeInt(const std::string_view str)
+std::pair<size_t, std::string_view> RespHandler::decodeInt(const std::string_view str)
 {
+    std::cout << __PRETTY_FUNCTION__ << "str: " << str << "\n";
+
     const auto crlfPos = str.find("\r\n");
     if (crlfPos == std::string::npos) {
         throw std::invalid_argument { "Missing CRLF in Simple String" };
     }
     std::string_view decodedInt = str.substr(1, crlfPos - 1);
     // TODO: Verify value is integer with regex
-    return decodedInt;
+    return {crlfPos, decodedInt};
 }
 
-constexpr std::string_view RespHandler::decodeArray(const std::string_view str)
+std::pair<size_t, std::string_view> RespHandler::decodeArray(const std::string_view str)
 {
+    std::cout << __PRETTY_FUNCTION__ << "str: " << str << "\n";
+
     const auto arrLenDel = str.find_first_of("\r\n");
     int arrLen {};
     std::from_chars_result convertArrLenRes = std::from_chars(str.data() + 1, str.data() + arrLenDel, arrLen);
@@ -135,13 +153,23 @@ constexpr std::string_view RespHandler::decodeArray(const std::string_view str)
         throw std::invalid_argument { "Invalid length of bulk string. lengthDelim: " + std::string { str[arrLenDel] } };
     }
 
-    assert(arrLen == 1); // TODO: Accept arrays longer than 1 :)
-    const auto endDelim = str.find_last_of("\r\n");
-    return decode(str.substr(arrLenDel + 2, endDelim - 1 - (endDelim + 2)));
+
+    auto startPos = arrLenDel + 2;
+    for(int i = 0; i < arrLen; ++i){
+        const auto decodedVal = decode(str.substr(startPos));
+        std::cout << "Decoded: " << decodedVal.second << " len " << decodedVal.second.length() << "\n";
+        res += ";" + std::string{decodedVal.second};
+        startPos+=decodedVal.first+2;
+        std::cout << "Startpos: " << startPos << " " << str[startPos] << "\n";
+    }
+    std::cout << "Result: " << res << "." << "\n";
+    return {startPos, res};
 }
 
-std::string_view RespHandler::decode(const std::string_view str)
+std::pair<size_t, std::string_view> RespHandler::decode(const std::string_view str)
 {
+    std::cout << __PRETTY_FUNCTION__ << "str: " << str << "\n";
+
     const auto prefix = static_cast<Prefix>(str[0]);
     switch (prefix) {
     case Prefix::SIMPLE_STRING:
@@ -155,7 +183,7 @@ std::string_view RespHandler::decode(const std::string_view str)
     case Prefix::ARRAY:
         return decodeArray(str);
     }
-    return "";
+    return {-1, ""};
 }
 
 const std::vector<uint8_t>& RespHandler::getBuffer() const { return buffer; }
