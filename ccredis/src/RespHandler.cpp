@@ -155,13 +155,15 @@ std::pair<size_t, std::string_view> RespHandler::decodeArray(const std::string_v
 
 
     auto startPos = arrLenDel + 2;
+    std::string result{};
     for(int i = 0; i < arrLen; ++i){
         const auto decodedVal = decode(str.substr(startPos));
         std::cout << "Decoded: " << decodedVal.second << " len " << decodedVal.second.length() << "\n";
-        res += ";" + std::string{decodedVal.second};
+        result += ";" + std::string{decodedVal.second};
         startPos+=decodedVal.first+2;
         std::cout << "Startpos: " << startPos << " " << str[startPos] << "\n";
     }
+    res = result;
     std::cout << "Result: " << res << "." << "\n";
     return {startPos, res};
 }

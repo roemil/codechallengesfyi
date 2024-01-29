@@ -83,3 +83,8 @@ TEST_F(RespHandlerDecodeTest, ArrayTwoIntsLongBulkString)
 {
     EXPECT_EQ(std::string_view { ";1;hello world;2" }, rh.decode("*3\r\n:1\r\n$11\r\nhello world\r\n:2\r\n").second);
 }
+
+TEST_F(RespHandlerDecodeTest, NestedArr)
+{
+    EXPECT_EQ(std::string_view { ";;2" }, rh.decode("*1\r\n*1\r\n:2\r\n\r\n").second);
+}
