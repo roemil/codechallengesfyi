@@ -66,39 +66,45 @@ TEST_F(RespHandlerDecodeTest, Null)
 
 TEST_F(RespHandlerDecodeTest, ArraySingleInt)
 {
-    EXPECT_EQ(RedisRespRes{.array_ = {RedisRespRes{.integer_ = "1"}}}, rh.decode("*1\r\n:1\r\n").second);
+    EXPECT_EQ(RedisRespRes { .array_ = { RedisRespRes { .integer_ = "1" } } }, rh.decode("*1\r\n:1\r\n").second);
 }
 
 TEST_F(RespHandlerDecodeTest, ArrayTwoInts)
 {
-    RedisRespRes redisRespInt1 = RedisRespRes{.integer_ = "1"};
-    RedisRespRes redisRespInt2 = RedisRespRes{.integer_ = "2"};
-    RedisRespRes redisRespArr = RedisRespRes{.array_ = {redisRespInt1, redisRespInt2}};
+    RedisRespRes redisRespInt1 = RedisRespRes { .integer_ = "1" };
+    RedisRespRes redisRespInt2 = RedisRespRes { .integer_ = "2" };
+    RedisRespRes redisRespArr = RedisRespRes { .array_ = { redisRespInt1, redisRespInt2 } };
     EXPECT_EQ(redisRespArr, rh.decode("*2\r\n:1\r\n:2\r\n").second);
 }
 
-
 TEST_F(RespHandlerDecodeTest, ArrayTwoIntsBulkString)
 {
-    RedisRespRes redisRespInt1 = RedisRespRes{.integer_ = "1"};
-    RedisRespRes redisRespInt2 = RedisRespRes{.integer_ = "2"};
-    RedisRespRes redisRespBulkStr = RedisRespRes{.bulkString_ = "PING"};
-    RedisRespRes redisRespArr = RedisRespRes{.array_ = {redisRespInt1, redisRespBulkStr, redisRespInt2}};
+    RedisRespRes redisRespInt1 = RedisRespRes { .integer_ = "1" };
+    RedisRespRes redisRespInt2 = RedisRespRes { .integer_ = "2" };
+    RedisRespRes redisRespBulkStr = RedisRespRes { .bulkString_ = "PING" };
+    RedisRespRes redisRespArr = RedisRespRes { .array_ = { redisRespInt1, redisRespBulkStr, redisRespInt2 } };
     EXPECT_EQ(redisRespArr, rh.decode("*3\r\n:1\r\n$4\r\nPING\r\n:2\r\n").second);
 }
 
 TEST_F(RespHandlerDecodeTest, ArrayTwoIntsLongBulkString)
 {
-    RedisRespRes redisRespInt1 = RedisRespRes{.integer_ = "1"};
-    RedisRespRes redisRespInt2 = RedisRespRes{.integer_ = "2"};
-    RedisRespRes redisRespBulkStr = RedisRespRes{.bulkString_ = "hello world"};
-    RedisRespRes redisRespArr = RedisRespRes{.array_ = {redisRespInt1, redisRespBulkStr, redisRespInt2}};
+    RedisRespRes redisRespInt1 = RedisRespRes { .integer_ = "1" };
+    RedisRespRes redisRespInt2 = RedisRespRes { .integer_ = "2" };
+    RedisRespRes redisRespBulkStr = RedisRespRes { .bulkString_ = "hello world" };
+    RedisRespRes redisRespArr = RedisRespRes { .array_ = { redisRespInt1, redisRespBulkStr, redisRespInt2 } };
     EXPECT_EQ(redisRespArr, rh.decode("*3\r\n:1\r\n$11\r\nhello world\r\n:2\r\n").second);
 }
 
 TEST_F(RespHandlerDecodeTest, NestedArr)
 {
-    RedisRespRes redisRespInt = RedisRespRes{.integer_ = "2"};
-    RedisRespRes redisRespArr = RedisRespRes{.array_ = {RedisRespRes{.array_ = {redisRespInt}}}};
+    RedisRespRes redisRespInt = RedisRespRes { .integer_ = "2" };
+    RedisRespRes redisRespArr = RedisRespRes { .array_ = { RedisRespRes { .array_ = { redisRespInt } } } };
+    EXPECT_EQ(redisRespArr, rh.decode("*1\r\n*1\r\n:2\r\n\r\n").second);
+}
+
+TEST_F(RespHandlerDecodeTest, Map)
+{
+    RedisRespRes redisRespInt = RedisRespRes { .integer_ = "2" };
+    RedisRespRes redisRespArr = RedisRespRes { .array_ = { RedisRespRes { .array_ = { redisRespInt } } } };
     EXPECT_EQ(redisRespArr, rh.decode("*1\r\n*1\r\n:2\r\n\r\n").second);
 }
