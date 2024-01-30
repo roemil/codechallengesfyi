@@ -76,8 +76,6 @@ void RespHandler::beginArray(const unsigned numElements)
 
 std::pair<size_t, RedisRespRes> RespHandler::decodeSimpleString(const std::string_view str)
 {
-    std::cout << __PRETTY_FUNCTION__ << "str: " << str << "\n";
-
     const auto crlfPos = str.find("\r\n");
 
     if (crlfPos == std::string::npos) {
@@ -88,8 +86,6 @@ std::pair<size_t, RedisRespRes> RespHandler::decodeSimpleString(const std::strin
 
 std::pair<size_t, RedisRespRes> RespHandler::decodeBulkString(const std::string_view str)
 {
-    std::cout << __PRETTY_FUNCTION__ << "str: " << str << "\n";
-
     const auto lengthDelim = str.find_first_of("\r\n");
     if (lengthDelim == std::string::npos) {
         throw std::invalid_argument { "Missing CRLF in Simple String" };
@@ -105,23 +101,18 @@ std::pair<size_t, RedisRespRes> RespHandler::decodeBulkString(const std::string_
         throw std::invalid_argument { "Invalid length of bulk string. lengthDelim: " + std::string { str[lengthDelim] } };
     }
 
-    std::cout << "[INFO]: Length: " << std::to_string(length) << "\n";
-
-    //const auto endDelim = str.find_last_of("\r\n");
-    //const auto endDelim = lengthDelim+2+length;//str.find("\r\n", lengthDelim+3);
-    const auto endDelim = str.find("\r\n", lengthDelim+3);
+    const auto endDelim = lengthDelim+2+length;
+    if(str[endDelim] != '\r'){
+        throw std::invalid_argument { "Invalid format. End delimiter should come after the string. Length mismatch?" };
+    }
     if (endDelim == lengthDelim) {
         throw std::invalid_argument { "Invalid format. End delimiter same as length delimiter" };
     }
-    std::cout << "[INFO]: lengthDelim: " << std::to_string(lengthDelim) << "\n";
-    std::cout << "[INFO]: endDelim: " << std::to_string(endDelim) << "\n";
     return {endDelim, RedisRespRes{.bulkString_ = str.substr(lengthDelim + 2, length)}};
 }
 
 std::pair<size_t, RedisRespRes> RespHandler::decodeError(const std::string_view str)
 {
-    std::cout << __PRETTY_FUNCTION__ << "str: " << str << "\n";
-
     const auto crlfPos = str.find("\r\n");
     if (crlfPos == std::string::npos) {
         throw std::invalid_argument { "Missing CRLF in Simple String" };
@@ -132,8 +123,6 @@ std::pair<size_t, RedisRespRes> RespHandler::decodeError(const std::string_view 
 
 std::pair<size_t, RedisRespRes> RespHandler::decodeInt(const std::string_view str)
 {
-    std::cout << __PRETTY_FUNCTION__ << "str: " << str << "\n";
-
     const auto crlfPos = str.find("\r\n");
     if (crlfPos == std::string::npos) {
         throw std::invalid_argument { "Missing CRLF in Simple String" };
@@ -145,8 +134,6 @@ std::pair<size_t, RedisRespRes> RespHandler::decodeInt(const std::string_view st
 
 std::pair<size_t, RedisRespRes> RespHandler::decodeArray(const std::string_view str)
 {
-    std::cout << __PRETTY_FUNCTION__ << "str: " << str << "\n";
-
     const auto arrLenDel = str.find_first_of("\r\n");
     int arrLen {};
     std::from_chars_result convertArrLenRes = std::from_chars(str.data() + 1, str.data() + arrLenDel, arrLen);
@@ -154,22 +141,18 @@ std::pair<size_t, RedisRespRes> RespHandler::decodeArray(const std::string_view 
         throw std::invalid_argument { "Invalid length of bulk string. lengthDelim: " + std::string { str[arrLenDel] } };
     }
 
-
     auto startPos = arrLenDel + 2;
     std::vector<RedisRespRes> result{};
     for(int i = 0; i < arrLen; ++i){
         const auto decodedVal = decode(str.substr(startPos));
         result.push_back(decodedVal.second);
         startPos+=decodedVal.first+2;
-        std::cout << "Startpos: " << startPos << " " << str[startPos] << "\n";
     }
     return {startPos, RedisRespRes{.array_ = result}};
 }
 
 std::pair<size_t, RedisRespRes> RespHandler::decode(const std::string_view str)
 {
-    std::cout << __PRETTY_FUNCTION__ << "str: " << str << "\n";
-
     const auto prefix = static_cast<Prefix>(str[0]);
     switch (prefix) {
     case Prefix::SIMPLE_STRING:
