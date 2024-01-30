@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <vector>
 
 void RespHandler::appendChars(const std::string_view str)
 {
@@ -73,7 +74,7 @@ void RespHandler::beginArray(const unsigned numElements)
     appendCRLF();
 }
 
-std::pair<size_t, std::string_view> RespHandler::decodeSimpleString(const std::string_view str)
+std::pair<size_t, RedisRespRes> RespHandler::decodeSimpleString(const std::string_view str)
 {
     std::cout << __PRETTY_FUNCTION__ << "str: " << str << "\n";
 
@@ -82,10 +83,10 @@ std::pair<size_t, std::string_view> RespHandler::decodeSimpleString(const std::s
     if (crlfPos == std::string::npos) {
         throw std::invalid_argument { "Missing CRLF in Simple String" };
     }
-    return {crlfPos, str.substr(1, crlfPos - 1)};
+    return {crlfPos, RedisRespRes{.simpleString_ = str.substr(1, crlfPos - 1)}};
 }
 
-std::pair<size_t, std::string_view> RespHandler::decodeBulkString(const std::string_view str)
+std::pair<size_t, RedisRespRes> RespHandler::decodeBulkString(const std::string_view str)
 {
     std::cout << __PRETTY_FUNCTION__ << "str: " << str << "\n";
 
@@ -95,7 +96,7 @@ std::pair<size_t, std::string_view> RespHandler::decodeBulkString(const std::str
     }
 
     if (str.substr(1, lengthDelim - 1) == "-1") {
-        return {lengthDelim, "null"};
+        return {lengthDelim, RedisRespRes{.bulkString_ = "null"}};
     }
 
     int length {};
@@ -114,10 +115,10 @@ std::pair<size_t, std::string_view> RespHandler::decodeBulkString(const std::str
     }
     std::cout << "[INFO]: lengthDelim: " << std::to_string(lengthDelim) << "\n";
     std::cout << "[INFO]: endDelim: " << std::to_string(endDelim) << "\n";
-    return {endDelim, str.substr(lengthDelim + 2, length)};
+    return {endDelim, RedisRespRes{.bulkString_ = str.substr(lengthDelim + 2, length)}};
 }
 
-std::pair<size_t, std::string_view> RespHandler::decodeError(const std::string_view str)
+std::pair<size_t, RedisRespRes> RespHandler::decodeError(const std::string_view str)
 {
     std::cout << __PRETTY_FUNCTION__ << "str: " << str << "\n";
 
@@ -126,10 +127,10 @@ std::pair<size_t, std::string_view> RespHandler::decodeError(const std::string_v
         throw std::invalid_argument { "Missing CRLF in Simple String" };
     }
 
-    return {crlfPos, str.substr(1, crlfPos - 1)};
+    return {crlfPos, RedisRespRes{.error_ = str.substr(1, crlfPos - 1)}};
 }
 
-std::pair<size_t, std::string_view> RespHandler::decodeInt(const std::string_view str)
+std::pair<size_t, RedisRespRes> RespHandler::decodeInt(const std::string_view str)
 {
     std::cout << __PRETTY_FUNCTION__ << "str: " << str << "\n";
 
@@ -139,10 +140,10 @@ std::pair<size_t, std::string_view> RespHandler::decodeInt(const std::string_vie
     }
     std::string_view decodedInt = str.substr(1, crlfPos - 1);
     // TODO: Verify value is integer with regex
-    return {crlfPos, decodedInt};
+    return {crlfPos, RedisRespRes{.integer_ = decodedInt}};
 }
 
-std::pair<size_t, std::string_view> RespHandler::decodeArray(const std::string_view str)
+std::pair<size_t, RedisRespRes> RespHandler::decodeArray(const std::string_view str)
 {
     std::cout << __PRETTY_FUNCTION__ << "str: " << str << "\n";
 
@@ -155,20 +156,17 @@ std::pair<size_t, std::string_view> RespHandler::decodeArray(const std::string_v
 
 
     auto startPos = arrLenDel + 2;
-    std::string result{};
+    std::vector<RedisRespRes> result{};
     for(int i = 0; i < arrLen; ++i){
         const auto decodedVal = decode(str.substr(startPos));
-        std::cout << "Decoded: " << decodedVal.second << " len " << decodedVal.second.length() << "\n";
-        result += ";" + std::string{decodedVal.second};
+        result.push_back(decodedVal.second);
         startPos+=decodedVal.first+2;
         std::cout << "Startpos: " << startPos << " " << str[startPos] << "\n";
     }
-    res = result;
-    std::cout << "Result: " << res << "." << "\n";
-    return {startPos, res};
+    return {startPos, RedisRespRes{.array_ = result}};
 }
 
-std::pair<size_t, std::string_view> RespHandler::decode(const std::string_view str)
+std::pair<size_t, RedisRespRes> RespHandler::decode(const std::string_view str)
 {
     std::cout << __PRETTY_FUNCTION__ << "str: " << str << "\n";
 
@@ -185,7 +183,7 @@ std::pair<size_t, std::string_view> RespHandler::decode(const std::string_view s
     case Prefix::ARRAY:
         return decodeArray(str);
     }
-    return {-1, ""};
+    return {-1, RedisRespRes{}};
 }
 
 const std::vector<uint8_t>& RespHandler::getBuffer() const { return buffer; }

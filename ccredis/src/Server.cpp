@@ -68,14 +68,15 @@ void sendData(int clientFd, std::vector<uint8_t> buffer)
 void handleInput(int clientFd, const std::string_view str)
 {
     RespHandler rh {};
+    // TODO handle client handshake
     try {
         const auto cmd = rh.decode(str);
-        std::cout << "[INFO] CMD: " << cmd.second << "\n";
-        if (cmd.second == "PING") {
+        std::cout << "[INFO] CMD: " << cmd.second.simpleString_ << "\n";
+        if (cmd.second.simpleString_ == "PING") {
             rh.appendSimpleString("PONG");
             sendData(clientFd, rh.getBuffer());
         }else {
-            std::cout << "[INFO] Unknown command: " << cmd.second << "\n";
+            std::cout << "[INFO] Unknown command: " << cmd.second.simpleString_ << "\n";
         }
     } catch (const std::invalid_argument& e) {
         std::cout << "[INFO] Invalid argument: " << e.what() << "\n";

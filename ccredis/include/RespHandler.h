@@ -13,11 +13,18 @@ enum class Prefix : char {
     ARRAY = '*'
 };
 
-// TODO: use this :)
-// struct RedisRespRes{
-//     int i;
-//     std::vector<RedisRespRes> vec;
-// };
+struct RedisRespRes {
+    // TODO: Make values optional
+    std::string_view integer_{};
+    std::string_view simpleString_{};
+    std::string_view bulkString_{};
+    std::string_view error_{};
+    std::vector<RedisRespRes> array_;
+
+    friend bool operator==(const RedisRespRes& lhs, const RedisRespRes& rhs){
+        return lhs.integer_ == rhs.integer_ && lhs.simpleString_ == rhs.simpleString_ && lhs.bulkString_ == rhs.bulkString_ && lhs.error_ == rhs.error_ && lhs.array_ == rhs.array_;
+    }
+};
 
 class RespHandler {
 public:
@@ -28,19 +35,18 @@ public:
     void appendNull();
     void beginArray(const unsigned numElements);
 
-    [[nodiscard]] std::pair<size_t, std::string_view> decode(const std::string_view str);
+    [[nodiscard]] static std::pair<size_t, RedisRespRes> decode(const std::string_view str);
 
     const std::vector<uint8_t>& getBuffer() const;
 
 private:
     void appendCRLF();
     void appendChars(const std::string_view str);
-    static std::pair<size_t, std::string_view> decodeSimpleString(const std::string_view str);
-    static std::pair<size_t, std::string_view> decodeError(const std::string_view str);
-    static std::pair<size_t, std::string_view> decodeInt(const std::string_view str);
-    static std::pair<size_t, std::string_view> decodeBulkString(const std::string_view str);
-    std::pair<size_t, std::string_view> decodeArray(const std::string_view str);
+    static std::pair<size_t, RedisRespRes> decodeSimpleString(const std::string_view str);
+    static std::pair<size_t, RedisRespRes> decodeError(const std::string_view str);
+    static std::pair<size_t, RedisRespRes> decodeInt(const std::string_view str);
+    static std::pair<size_t, RedisRespRes> decodeBulkString(const std::string_view str);
+    static std::pair<size_t, RedisRespRes> decodeArray(const std::string_view str);
     // TODO: Replace with a output stringstream?
     std::vector<uint8_t> buffer {};
-    std::string res{};
 };
