@@ -71,7 +71,6 @@ void sendData(int clientFd, std::vector<char> buffer)
 void handleInput(int clientFd, const std::string_view str)
 {
     RespHandler rh {};
-    // TODO handle client handshake
     try {
         const auto cmd = rh.decode(str);
         std::cout << "[INFO] CMD: " << cmd.second << "\n";
