@@ -87,26 +87,6 @@ void handleInput(int clientFd, const std::string_view str)
             rh.appendKV("server", "redis");
             rh.appendKV("version", "0.0.1");
             rh.appendKV("proto", 3);
-            // rh.appendKV("id", 1);
-            // rh.appendKV("mode", "standalone");
-            // rh.appendKV("role", "master");
-            // rh.appendSimpleString("modules");
-            // rh.beginArray(0);
-            // rh.beginArray(14);
-            // rh.appendSimpleString("server");
-            // rh.appendSimpleString("redis");
-            // rh.appendSimpleString("version");
-            // rh.appendSimpleString("0.0.1");
-            // rh.appendSimpleString("proto");
-            // rh.appendInt("3");
-            // rh.appendSimpleString("id");
-            // rh.appendInt("1");
-            // rh.appendSimpleString("mode");
-            // rh.appendSimpleString("standalone");
-            // rh.appendSimpleString("role");
-            // rh.appendSimpleString("master");
-            // rh.appendSimpleString("modules");
-            // rh.beginArray(0);
             std::cout << "[INFO]: sent: ";
             for(const auto& elem: rh.getBuffer()){
                 std::cout << static_cast<char>(+elem);
