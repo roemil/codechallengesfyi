@@ -145,7 +145,7 @@ std::pair<size_t, RedisRespRes> RespHandler::decodeInt(const std::string_view st
     }
     std::string_view decodedInt = str.substr(1, crlfPos - 1);
     // TODO: Verify value is integer with regex
-    return { crlfPos, RedisRespRes { .integer_ = decodedInt } };
+    return { crlfPos, RedisRespRes { .integer_ = std::stoi(decodedInt.data()) } };
 }
 
 std::pair<size_t, RedisRespRes> RespHandler::decodeArray(const std::string_view str)
@@ -181,11 +181,11 @@ std::pair<size_t, RedisRespRes> RespHandler::decodeMap(const std::string_view st
     for (int i = 0; i < mapLen; ++i) {
         const auto decodedKey = decode(str.substr(startPos));
         std::string_view key{};
-        if(!decodedKey.second.simpleString_.empty())
+        if(decodedKey.second.simpleString_.has_value())
         {
-            key = decodedKey.second.simpleString_;
-        }else if (!decodedKey.second.bulkString_.empty()) {
-            key = decodedKey.second.bulkString_;
+            key = decodedKey.second.simpleString_.value();
+        }else if (decodedKey.second.bulkString_.has_value()) {
+            key = decodedKey.second.bulkString_.value();
         }
         else {
             std::cout << "Expected key as string, got: " << decodedKey.second;
@@ -200,7 +200,7 @@ std::pair<size_t, RedisRespRes> RespHandler::decodeMap(const std::string_view st
 
 std::pair<size_t, RedisRespRes> RespHandler::decode(const std::string_view str)
 {
-    // TODO: Implement maps and sets
+    // TODO: Implement sets
     std::cout << __PRETTY_FUNCTION__ << " str= " << str;
     const auto prefix = static_cast<Prefix>(str[0]);
     switch (prefix) {

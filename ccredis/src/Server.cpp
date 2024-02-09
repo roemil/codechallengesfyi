@@ -68,20 +68,27 @@ void sendData(int clientFd, std::vector<char> buffer)
     }
 }
 
+/*
+TODO:
+Handle Command function
+Build a command queue (for arrays)
+Build a response and send that out
+*/
+
 void handleInput(int clientFd, const std::string_view str)
 {
     RespHandler rh {};
     try {
         const auto cmd = rh.decode(str);
         std::cout << "[INFO] CMD: " << cmd.second << "\n";
-        std::cout << "[INFO] CMD: " << cmd.second.simpleString_ << "\n";
+        //std::cout << "[INFO] CMD: " << cmd.second.simpleString_ << "\n";
         if (cmd.second.simpleString_ == "PING") {
             rh.appendBulkstring("PONG");
             sendData(clientFd, rh.getBuffer());
-        }else if (cmd.second.array_.size() > 0 && cmd.second.array_[0].bulkString_ == "PING") {
+        }else if (cmd.second.array_.has_value() && cmd.second.array_.value()[0].bulkString_ == "PING") {
             rh.appendBulkstring("PONG");
             sendData(clientFd, rh.getBuffer());
-        } else if (cmd.second.array_[0].bulkString_ == "HELLO" && cmd.second.array_[1].bulkString_ == "3") {
+        } else if (cmd.second.array_.has_value() && cmd.second.array_.value()[0].bulkString_ == "HELLO" && cmd.second.array_.value()[1].bulkString_ == "3") {
             rh.beginMap(3);
             rh.appendKV("server", "redis");
             rh.appendKV("version", "0.0.1");
@@ -95,7 +102,7 @@ void handleInput(int clientFd, const std::string_view str)
         } else {
             rh.appendSimpleString("OK");
             sendData(clientFd, rh.getBuffer());
-            std::cout << "[INFO] Unknown command: " << cmd.second.simpleString_ << "\n";
+            std::cout << "[INFO] Unknown command: " << cmd.second.simpleString_.value_or("") << "\n";
         }
     } catch (const std::invalid_argument& e) {
         std::cout << "[INFO] Invalid argument: " << e.what() << "\n";

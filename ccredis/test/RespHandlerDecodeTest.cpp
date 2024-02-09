@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <optional>
 #include <stdexcept>
 #include <string_view>
 #include <vector>
@@ -36,17 +37,17 @@ TEST_F(RespHandlerDecodeTest, Error)
 
 TEST_F(RespHandlerDecodeTest, IntegerNoSign)
 {
-    EXPECT_EQ(std::string_view { "1000" }, rh.decode(":1000\r\n").second.integer_);
+    EXPECT_EQ(1000, rh.decode(":1000\r\n").second.integer_);
 }
 
 TEST_F(RespHandlerDecodeTest, IntegerNegative)
 {
-    EXPECT_EQ(std::string_view { "-1000" }, rh.decode(":-1000\r\n").second.integer_);
+    EXPECT_EQ(-1000, rh.decode(":-1000\r\n").second.integer_);
 }
 
 TEST_F(RespHandlerDecodeTest, IntegerPos)
 {
-    EXPECT_EQ(std::string_view { "+1000" }, rh.decode(":+1000\r\n").second.integer_);
+    EXPECT_EQ(1000, rh.decode(":+1000\r\n").second.integer_);
 }
 
 TEST_F(RespHandlerDecodeTest, BulkString)
@@ -66,45 +67,47 @@ TEST_F(RespHandlerDecodeTest, Null)
 
 TEST_F(RespHandlerDecodeTest, ArraySingleInt)
 {
-    EXPECT_EQ(RedisRespRes { .array_ = { RedisRespRes { .integer_ = "1" } } }, rh.decode("*1\r\n:1\r\n").second);
+    EXPECT_EQ(RedisRespRes { .array_ = { std::vector<RedisRespRes>{ RedisRespRes{ .integer_ = 1 }} } }, rh.decode("*1\r\n:1\r\n").second);
 }
 
 TEST_F(RespHandlerDecodeTest, ArrayTwoInts)
 {
-    RedisRespRes redisRespInt1 = RedisRespRes { .integer_ = "1" };
-    RedisRespRes redisRespInt2 = RedisRespRes { .integer_ = "2" };
-    RedisRespRes redisRespArr = RedisRespRes { .array_ = { redisRespInt1, redisRespInt2 } };
+    RedisRespRes redisRespInt1 = RedisRespRes { .integer_ = 1 };
+    RedisRespRes redisRespInt2 = RedisRespRes { .integer_ = 2 };
+    RedisRespRes redisRespArr = RedisRespRes { .array_ = std::vector<RedisRespRes> { redisRespInt1, redisRespInt2 } };
     EXPECT_EQ(redisRespArr, rh.decode("*2\r\n:1\r\n:2\r\n").second);
 }
 
 TEST_F(RespHandlerDecodeTest, ArrayTwoIntsBulkString)
 {
-    RedisRespRes redisRespInt1 = RedisRespRes { .integer_ = "1" };
-    RedisRespRes redisRespInt2 = RedisRespRes { .integer_ = "2" };
+    RedisRespRes redisRespInt1 = RedisRespRes { .integer_ = 1 };
+    RedisRespRes redisRespInt2 = RedisRespRes { .integer_ = 2 };
     RedisRespRes redisRespBulkStr = RedisRespRes { .bulkString_ = "PING" };
-    RedisRespRes redisRespArr = RedisRespRes { .array_ = { redisRespInt1, redisRespBulkStr, redisRespInt2 } };
+    RedisRespRes redisRespArr = RedisRespRes { .array_ = std::vector<RedisRespRes> { redisRespInt1, redisRespBulkStr, redisRespInt2 } };
     EXPECT_EQ(redisRespArr, rh.decode("*3\r\n:1\r\n$4\r\nPING\r\n:2\r\n").second);
 }
 
 TEST_F(RespHandlerDecodeTest, ArrayTwoIntsLongBulkString)
 {
-    RedisRespRes redisRespInt1 = RedisRespRes { .integer_ = "1" };
-    RedisRespRes redisRespInt2 = RedisRespRes { .integer_ = "2" };
+    RedisRespRes redisRespInt1 = RedisRespRes { .integer_ = 1 };
+    RedisRespRes redisRespInt2 = RedisRespRes { .integer_ = 2 };
     RedisRespRes redisRespBulkStr = RedisRespRes { .bulkString_ = "hello world" };
-    RedisRespRes redisRespArr = RedisRespRes { .array_ = { redisRespInt1, redisRespBulkStr, redisRespInt2 } };
+    RedisRespRes redisRespArr = RedisRespRes { .array_ = std::vector<RedisRespRes> { redisRespInt1, redisRespBulkStr, redisRespInt2 } };
     EXPECT_EQ(redisRespArr, rh.decode("*3\r\n:1\r\n$11\r\nhello world\r\n:2\r\n").second);
 }
 
 TEST_F(RespHandlerDecodeTest, NestedArr)
 {
-    RedisRespRes redisRespInt = RedisRespRes { .integer_ = "2" };
-    RedisRespRes redisRespArr = RedisRespRes { .array_ = { RedisRespRes { .array_ = { redisRespInt } } } };
+    RedisRespRes redisRespInt = RedisRespRes { .integer_ = 2 };
+    RedisRespRes redisRespArr = RedisRespRes { .array_ = std::vector<RedisRespRes> { RedisRespRes { .array_ = std::vector<RedisRespRes> { redisRespInt } } } };
     EXPECT_EQ(redisRespArr, rh.decode("*1\r\n*1\r\n:2\r\n\r\n").second);
 }
 
 TEST_F(RespHandlerDecodeTest, Map)
 {
-    RedisRespRes redisRespInt = RedisRespRes { .integer_ = "2" };
-    RedisRespRes redisRespArr = RedisRespRes { .array_ = { RedisRespRes { .array_ = { redisRespInt } } } };
-    EXPECT_EQ(redisRespArr, rh.decode("*1\r\n*1\r\n:2\r\n\r\n").second);
+    RedisRespRes redisRespInt = RedisRespRes { .integer_ = 2 };
+    std::map<std::string_view, RedisRespRes> map{};
+    map["key"] = redisRespInt;
+    RedisRespRes redisRespMap = RedisRespRes { .map_ = map };
+    EXPECT_EQ(redisRespMap, rh.decode("%1\r\n+key\r\n:2\r\n\r\n").second);
 }

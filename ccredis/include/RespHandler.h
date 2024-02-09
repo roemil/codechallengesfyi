@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <ostream>
 #include <string>
 #include <string_view>
@@ -18,12 +19,12 @@ enum class Prefix : char {
 
 struct RedisRespRes {
     // TODO: Make values optional
-    std::string_view integer_ {};
-    std::string_view simpleString_ {};
-    std::string_view bulkString_ {};
-    std::string_view error_ {};
-    std::vector<RedisRespRes> array_{};
-    std::map<std::string_view, RedisRespRes> map_{};
+    std::optional<int> integer_ {};
+    std::optional<std::string_view> simpleString_ {};
+    std::optional<std::string_view> bulkString_ {};
+    std::optional<std::string_view> error_ {};
+    std::optional<std::vector<RedisRespRes>> array_{};
+    std::optional<std::map<std::string_view, RedisRespRes>> map_{};
 
     friend bool operator==(const RedisRespRes& lhs, const RedisRespRes& rhs)
     {
@@ -31,12 +32,15 @@ struct RedisRespRes {
     }
 
     friend std::ostream& operator<<(std::ostream& os, const RedisRespRes& resp){
-        os << "Int: " << resp.integer_ << "\n";
-        os << "SimpleString: " << resp.simpleString_ << "\n";
-        os << "BulkString: " << resp.bulkString_ << "\n";
-        os << "Error: " << resp.error_ << "\n";
-        for(const auto& elem : resp.array_){
-            os << elem;
+        os << "Int: " << resp.integer_.value_or(-1) << "\n";
+        os << "SimpleString: " << resp.simpleString_.value_or("") << "\n";
+        os << "BulkString: " << resp.bulkString_.value_or("") << "\n";
+        os << "Error: " << resp.error_.value_or("") << "\n";
+        if(resp.array_.has_value())
+        {
+            for(const auto& elem : resp.array_.value()){
+                os << elem;
+            }
         }
         return os;
     }
