@@ -1,9 +1,9 @@
 #include "Server.h"
 
 #include "CommandHandler.h"
-#include "RespEncoder.h"
-#include "RespDecoder.h"
 #include "Resp.h"
+#include "RespDecoder.h"
+#include "RespEncoder.h"
 
 #include <algorithm>
 #include <array>

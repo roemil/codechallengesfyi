@@ -5,8 +5,8 @@
 #include <string_view>
 #include <vector>
 
-#include "RespDecoder.h"
 #include "Resp.h"
+#include "RespDecoder.h"
 
 class RespDecoderTest : public testing::Test {
 protected:

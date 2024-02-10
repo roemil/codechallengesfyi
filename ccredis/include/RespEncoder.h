@@ -34,5 +34,4 @@ private:
     void appendCRLF();
     void appendChars(const std::string_view str);
     std::vector<char> buffer {};
-
 };
