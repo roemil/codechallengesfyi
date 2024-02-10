@@ -75,67 +75,51 @@ Build a command queue (for arrays)
 Build a response and send that out
 */
 
+void HandleCommand::operator()(const CommandUnknown&) const{
+    rh_.appendError("Unknown command. Prefix did not match any expected prefixes");
+}
+void HandleCommand::operator()(const CommandInvalid&) const{
+    rh_.appendError("Invalid Command");
+}
+void HandleCommand::operator()(const CommandPing&) const{
+    rh_.appendBulkstring("PONG");
+}
+void HandleCommand::operator()(const CommandHello& cmd) const{
+    if(cmd.version_ != "3"){
+        std::string error {"Version not supported: "};
+        rh_.appendError(error + cmd.version_.data());
+        return;
+    }
+    else if(cmd.version_.empty()){
+        rh_.appendError("Missing version");
+        return;
+    }
+    rh_.beginMap(3);
+    rh_.appendKV("server", "redis");
+    rh_.appendKV("version", "0.0.1");
+    rh_.appendKV("proto", 3);
+}
+void HandleCommand::operator()(const CommandSet&) const{
+    rh_.appendError("Unsupported command");
+}
+void HandleCommand::operator()(const CommandGet&) const{
+    rh_.appendError("Unsupported command");
+}
+
 void handleInput(int clientFd, const std::string_view str)
 {
     RespHandler rh {};
     try {
         const auto rawCmd = rh.decode(str);
         const auto cmds = rh.convertToCommands(rawCmd.second);
-        for(const auto& cmd : cmds)
-        {
-            std::cout << "[INFO]: Cmd: " << cmd << "\n";
-        }
+        // for(const auto& cmd : cmds)
+        // {
+        //     std::cout << "[INFO]: Cmd: " << cmd << "\n";
+        // }
         for (const auto& cmd : cmds) {
-            switch (cmd.kind_) {
-            case CommandKind::PING: {
-                rh.appendSimpleString("PONG");
-                sendData(clientFd, rh.getBuffer());
-                break;
-            }
-            case CommandKind::HELLO: {
-                if (cmd.payload_.has_value()) {
-                    if (std::holds_alternative<std::string_view>(cmd.payload_.value()[0]) && std::get<std::string_view>(cmd.payload_.value()[0]) == "3") {
-                        rh.beginMap(3);
-                        rh.appendKV("server", "redis");
-                        rh.appendKV("version", "0.0.1");
-                        rh.appendKV("proto", 3);
-                        std::cout << "[INFO]: sent: ";
-                        for (const auto& elem : rh.getBuffer()) {
-                            std::cout << static_cast<char>(+elem);
-                        }
-                        std::cout << "\n";
-                        sendData(clientFd, rh.getBuffer());
-                    } else {
-                        rh.appendError("Unsupported RESP version");// + std::to_string(std::get<int>(cmd.payload_.value()[0])));
-                        sendData(clientFd, rh.getBuffer());
-                    }
-                } else {
-                    rh.appendError("Invalid command. Missing version.");
-                    sendData(clientFd, rh.getBuffer());
-                }
-                break;
-            }
-            case CommandKind::UNKNOWN_COMMAND: {
-                rh.appendError("Unkown command");
-                sendData(clientFd, rh.getBuffer());
-                break;
-                // std::cout << "[INFO] Unknown command: " << cmd.payload_.value_or("") << "\n";
-            }
-            case CommandKind::INVALID_COMMAND_PARSE: {
-                rh.appendError("Invalid command");
-                sendData(clientFd, rh.getBuffer());
-                break;
-                // std::cout << "[INFO] Unknown command: " << cmd.payload_.value_or("") << "\n";
-            }
-            case CommandKind::SET:
-            case CommandKind::GET: {
-                std::cout << "[INFO] Command not yet supported: " << static_cast<int>(cmd.kind_) << "\n";
-                rh.appendError("Unsupported command");
-                sendData(clientFd, rh.getBuffer());
-                break;
-            }
-            }
+            std::visit(HandleCommand{rh}, cmd);
         }
+        sendData(clientFd, rh.getBuffer());
     } catch (const std::invalid_argument& e) {
         std::cout << "[INFO] Invalid argument: " << e.what() << "\n";
     }

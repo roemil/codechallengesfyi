@@ -27,6 +27,24 @@ enum class CommandKind {
     GET
 };
 
+struct CommandUnknown{};
+struct CommandInvalid{};
+struct CommandPing{};
+struct CommandHello{
+    constexpr CommandHello() = default;
+    std::string_view version_{};
+};
+struct CommandSet{
+    std::string_view key_;
+    std::string_view value_{}; // TODO: Allow multiple values
+};
+struct CommandGet{
+    std::string_view key_;
+};
+
+
+using CommandVariant = std::variant<CommandUnknown, CommandInvalid, CommandPing, CommandHello, CommandSet, CommandGet>;
+
 using PayloadT = std::variant<int, std::string_view>;
 
 template <class... Ts>
@@ -102,6 +120,21 @@ struct RedisRespRes {
     }
 };
 
+struct ParsePayload {
+    ParsePayload(const RedisRespRes& resp) : resp_(resp) {}
+    const RedisRespRes& resp_{};
+
+    ParsePayload(const ParsePayload&) = delete;
+    ParsePayload operator=(const ParsePayload&) = delete;
+
+    void operator()(CommandUnknown&);
+    void operator()(CommandInvalid&);
+    void operator()(CommandPing&);
+    void operator()(CommandHello&);
+    void operator()(CommandSet&);
+    void operator()(CommandGet&);
+};
+
 class RespHandler {
 public:
     void appendSimpleString(const std::string_view str);
@@ -116,7 +149,7 @@ public:
 
     [[nodiscard]] static std::pair<size_t, RedisRespRes> decode(const std::string_view str);
 
-    static std::vector<Command> convertToCommands(const RedisRespRes& rawCommands);
+    static std::vector<CommandVariant> convertToCommands(const RedisRespRes& rawCommands);
 
     const std::vector<char>& getBuffer() const;
 
@@ -132,6 +165,20 @@ private:
     // TODO: Replace with a output stringstream?
     std::vector<char> buffer {};
 
-    static Command parseRawCommand(const std::string_view rawCommand);
-    static Command parseRawArrayCommands(const std::vector<RedisRespRes>& commandArray);
+    static CommandVariant parseRawCommand(const std::string_view rawCommand);
+    static CommandVariant parseRawArrayCommands(const std::vector<RedisRespRes>& commandArray);
+};
+
+struct HandleCommand {
+    HandleCommand(RespHandler& rh) : rh_(rh) {}
+    HandleCommand(const HandleCommand&) = delete;
+    HandleCommand operator=(const HandleCommand&) = delete;
+
+    RespHandler& rh_;
+    void operator()(const CommandUnknown&) const;
+    void operator()(const CommandInvalid&) const;
+    void operator()(const CommandPing&) const;
+    void operator()(const CommandHello&) const;
+    void operator()(const CommandSet&) const;
+    void operator()(const CommandGet&) const;
 };

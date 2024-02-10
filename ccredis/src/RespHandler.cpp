@@ -222,69 +222,96 @@ std::pair<size_t, RedisRespRes> RespHandler::decode(const std::string_view str)
 
 const std::vector<char>& RespHandler::getBuffer() const { return buffer; }
 
-Command RespHandler::parseRawCommand(const std::string_view rawCommand)
+CommandVariant RespHandler::parseRawCommand(const std::string_view rawCommand)
 {
     std::cout << "RawCommand: " << rawCommand << ".\n";
     if (rawCommand == "PING") {
-        return Command { .kind_ = CommandKind::PING };
+        return CommandPing{};
+        //return Command { .kind_ = CommandKind::PING };
     }
-
-    if (rawCommand == "HELLO") {
-        return Command { .kind_ = CommandKind::HELLO };
-    }
-
     // TODO Use std::expected??
-    return Command { .kind_ = CommandKind::INVALID_COMMAND_PARSE };
+    return CommandUnknown{};
 }
 
-namespace {
-PayloadT parsePayload(const RedisRespRes& payload)
-{
-    if (payload.string_.has_value()) {
-        return payload.string_.value();
-    } else if (payload.integer_.has_value()) {
-        return payload.integer_.value();
+    void ParsePayload::operator()(CommandUnknown&){
+        return;
     }
-    // TODO: Use std::expected
-    return 0;
-}
-}
+    void ParsePayload::operator()(CommandInvalid&)
+    {
+        return;
+    }
+    void ParsePayload::operator()(CommandPing&)
+    {
+        return;
+    }
+    void ParsePayload::operator()(CommandHello& cmd){
+        assert(resp_.string_.has_value()); // Version is passed as string in client
+        cmd.version_ = resp_.string_.value();
 
-Command RespHandler::parseRawArrayCommands(const std::vector<RedisRespRes>& commandArray)
+    }
+    void ParsePayload::operator()(CommandSet& cmd){
+        if(cmd.key_.empty())
+        {
+            if(resp_.string_.has_value())
+            {
+                cmd.key_ = resp_.string_.value();
+            }else if(resp_.integer_.has_value()){
+                cmd.key_ = std::to_string(resp_.integer_.value());
+            }
+        } else {
+            if(resp_.string_.has_value())
+            {
+                cmd.value_ = resp_.string_.value();
+            }else if(resp_.integer_.has_value()){
+                cmd.value_ = std::to_string(resp_.integer_.value());
+            }
+        }
+    }
+    void ParsePayload::operator()(CommandGet& cmd) {
+            if(resp_.string_.has_value())
+            {
+                cmd.key_ = resp_.string_.value();
+            }else if(resp_.integer_.has_value()){
+                cmd.key_ = std::to_string(resp_.integer_.value());
+            }
+    }
+
+CommandVariant RespHandler::parseRawArrayCommands(const std::vector<RedisRespRes>& commandArray)
 {
-    Command cmd {};
+    //Command cmd {};
     const auto rawKind = commandArray[0].string_;
+    CommandVariant cmd;
     if (rawKind == "HELLO") {
-        cmd.kind_ = CommandKind::HELLO;
+        cmd = CommandHello{};
     } else if (rawKind == "SET") {
-        cmd.kind_ = CommandKind::SET;
+        cmd = CommandSet{};
     } else if (rawKind == "GET") {
-        cmd.kind_ = CommandKind::GET;
+        cmd = CommandGet{};
     } else if(rawKind == "PING")
     {
-        cmd.kind_ = CommandKind::PING;
+        cmd = CommandPing{};
     }
     else {
-        cmd.kind_ = CommandKind::INVALID_COMMAND_PARSE;
+        cmd = CommandInvalid{};
     }
-    cmd.payload_ = std::vector<PayloadT> {};
+
     for (auto it = commandArray.begin() + 1; it != commandArray.end(); ++it)
     // for(const auto& rawCommand : commandArray | std::views::drop(1))
     {
-        cmd.payload_->push_back(parsePayload(*it));
+        std::visit(ParsePayload{*it}, cmd);
     }
     return cmd;
 }
 
-std::vector<Command> RespHandler::convertToCommands(const RedisRespRes& rawCommands)
+std::vector<CommandVariant> RespHandler::convertToCommands(const RedisRespRes& rawCommands)
 {
-    std::vector<Command> commands {};
+    std::vector<CommandVariant> commands {};
     if (rawCommands.string_.has_value()) {
         commands.push_back(parseRawCommand(rawCommands.string_.value()));
     } else if (rawCommands.array_.has_value()) {
         commands.push_back(parseRawArrayCommands(rawCommands.array_.value()));
     } else {
-        commands.push_back(Command { .kind_ = CommandKind::UNKNOWN_COMMAND });
+        commands.push_back(CommandUnknown{});
     }
     return commands;
 }
