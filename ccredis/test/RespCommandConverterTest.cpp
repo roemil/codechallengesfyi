@@ -13,20 +13,20 @@ protected:
 
 TEST_F(RespCommandConverterTest, UnknownCommand)
 {
-    RedisRespRes rawCommand{.string_ = "SomeCmd"};
-    EXPECT_EQ(Command{.kind_ = CommandKind::UNKNOWN_COMMAND }, rh.convertToCommands(rawCommand)[0]);
+    RedisRespRes rawCommand { .string_ = "SomeCmd" };
+    EXPECT_EQ(Command { .kind_ = CommandKind::UNKNOWN_COMMAND }, rh.convertToCommands(rawCommand)[0]);
 }
 
 TEST_F(RespCommandConverterTest, Ping)
 {
-    RedisRespRes rawCommand{.string_ = "PING"};
-    EXPECT_EQ(Command{.kind_ = CommandKind::PING}, rh.convertToCommands(rawCommand)[0]);
+    RedisRespRes rawCommand { .string_ = "PING" };
+    EXPECT_EQ(Command { .kind_ = CommandKind::PING }, rh.convertToCommands(rawCommand)[0]);
 }
 
 TEST_F(RespCommandConverterTest, PingBulk)
 {
-    RedisRespRes rawCommand{.string_ = "PING"};
-    EXPECT_EQ(Command{.kind_ = CommandKind::PING}, rh.convertToCommands(rawCommand)[0]);
+    RedisRespRes rawCommand { .string_ = "PING" };
+    EXPECT_EQ(Command { .kind_ = CommandKind::PING }, rh.convertToCommands(rawCommand)[0]);
 }
 
 // TEST_F(RespCommandConverterTest, PingArray)
@@ -46,7 +46,7 @@ TEST_F(RespCommandConverterTest, PingBulk)
 
 TEST_F(RespCommandConverterTest, ArrayCommandWithPayload)
 {
-    RedisRespRes rawCommand{.array_ = std::vector<RedisRespRes> { RedisRespRes{.string_ {"HELLO"}}, RedisRespRes{.integer_ {3}} }};
+    RedisRespRes rawCommand { .array_ = std::vector<RedisRespRes> { RedisRespRes { .string_ { "HELLO" } }, RedisRespRes { .integer_ { 3 } } } };
     const auto commands = rh.convertToCommands(rawCommand);
     EXPECT_EQ(1, commands.size());
     EXPECT_EQ(CommandKind::HELLO, commands[0].kind_);
@@ -55,7 +55,7 @@ TEST_F(RespCommandConverterTest, ArrayCommandWithPayload)
 
 TEST_F(RespCommandConverterTest, SET)
 {
-    RedisRespRes rawCommand{.array_ = std::vector<RedisRespRes> { RedisRespRes{.string_ {"SET"}}, RedisRespRes{.string_ {"key"}}, RedisRespRes{.string_ {"value"}} }};
+    RedisRespRes rawCommand { .array_ = std::vector<RedisRespRes> { RedisRespRes { .string_ { "SET" } }, RedisRespRes { .string_ { "key" } }, RedisRespRes { .string_ { "value" } } } };
     const auto commands = rh.convertToCommands(rawCommand);
     EXPECT_EQ(1, commands.size());
     EXPECT_EQ(CommandKind::SET, commands[0].kind_);

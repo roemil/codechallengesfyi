@@ -1,5 +1,6 @@
 #pragma once
 
+#include <map>
 #include <optional>
 #include <ostream>
 #include <string>
@@ -7,7 +8,6 @@
 #include <utility>
 #include <variant>
 #include <vector>
-#include <map>
 
 enum class Prefix : char {
     SIMPLE_STRING = '+',
@@ -20,6 +20,7 @@ enum class Prefix : char {
 
 enum class CommandKind {
     UNKNOWN_COMMAND,
+    INVALID_COMMAND_PARSE,
     PING,
     HELLO,
     SET,
@@ -28,13 +29,22 @@ enum class CommandKind {
 
 using PayloadT = std::variant<int, std::string_view>;
 
-struct Command{
-    CommandKind kind_;
-    std::optional<std::vector<PayloadT>> payload_{};
+template <class... Ts>
+struct overloaded : Ts... {
+    using Ts::operator()...;
+};
+// explicit deduction guide (not needed as of C++20)
+template <class... Ts>
+overloaded(Ts...) -> overloaded<Ts...>;
 
-    friend bool operator==(const Command& lhs, const Command& rhs){
+struct Command {
+    CommandKind kind_;
+    std::optional<std::vector<PayloadT>> payload_ {};
+
+    friend bool operator==(const Command& lhs, const Command& rhs)
+    {
         const bool equalKind = lhs.kind_ == rhs.kind_;
-        if(!equalKind){
+        if (!equalKind) {
             return false;
         }
         // TODO: Fix comparison
@@ -46,27 +56,45 @@ struct Command{
         // }
         return true;
     }
+    friend std::ostream& operator<<(std::ostream& os, const Command& cmd)
+    {
+        os << "Kind: " << static_cast<int>(cmd.kind_) << "\n";
+        os << "Payload? " << std::boolalpha << cmd.payload_.has_value() << "\n";
+        if (cmd.payload_.has_value()) {
+            for (const auto& elem : cmd.payload_.value()) {
+                std::visit(overloaded {
+                               [&os](int i) {
+                                   os << "Payload(int): " << i << "\n";
+                               },
+                               [&os](std::string_view str) {
+                                   os << "Payload(str): " << str << "/n";
+                               } },
+                    elem);
+            }
+        }
+        return os;
+    }
 };
 
 struct RedisRespRes {
     std::optional<int> integer_ {};
     std::optional<std::string_view> string_ {};
     std::optional<std::string_view> error_ {};
-    std::optional<std::vector<RedisRespRes>> array_{};
-    std::optional<std::map<std::string_view, RedisRespRes>> map_{};
+    std::optional<std::vector<RedisRespRes>> array_ {};
+    std::optional<std::map<std::string_view, RedisRespRes>> map_ {};
 
     friend bool operator==(const RedisRespRes& lhs, const RedisRespRes& rhs)
     {
         return lhs.integer_ == rhs.integer_ && lhs.string_ == rhs.string_ && lhs.error_ == rhs.error_ && lhs.array_ == rhs.array_;
     }
 
-    friend std::ostream& operator<<(std::ostream& os, const RedisRespRes& resp){
+    friend std::ostream& operator<<(std::ostream& os, const RedisRespRes& resp)
+    {
         os << "Int: " << resp.integer_.value_or(-1) << "\n";
         os << "String: " << resp.string_.value_or("") << "\n";
         os << "Error: " << resp.error_.value_or("") << "\n";
-        if(resp.array_.has_value())
-        {
-            for(const auto& elem : resp.array_.value()){
+        if (resp.array_.has_value()) {
+            for (const auto& elem : resp.array_.value()) {
                 os << elem;
             }
         }

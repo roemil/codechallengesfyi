@@ -67,7 +67,7 @@ TEST_F(RespHandlerDecodeTest, Null)
 
 TEST_F(RespHandlerDecodeTest, ArraySingleInt)
 {
-    EXPECT_EQ(RedisRespRes { .array_ = { std::vector<RedisRespRes>{ RedisRespRes{ .integer_ = 1 }} } }, rh.decode("*1\r\n:1\r\n").second);
+    EXPECT_EQ(RedisRespRes { .array_ = { std::vector<RedisRespRes> { RedisRespRes { .integer_ = 1 } } } }, rh.decode("*1\r\n:1\r\n").second);
 }
 
 TEST_F(RespHandlerDecodeTest, ArrayTwoInts)
@@ -106,8 +106,16 @@ TEST_F(RespHandlerDecodeTest, NestedArr)
 TEST_F(RespHandlerDecodeTest, Map)
 {
     RedisRespRes redisRespInt = RedisRespRes { .integer_ = 2 };
-    std::map<std::string_view, RedisRespRes> map{};
+    std::map<std::string_view, RedisRespRes> map {};
     map["key"] = redisRespInt;
     RedisRespRes redisRespMap = RedisRespRes { .map_ = map };
     EXPECT_EQ(redisRespMap, rh.decode("%1\r\n+key\r\n:2\r\n\r\n").second);
+}
+
+TEST_F(RespHandlerDecodeTest, HelloHandshake)
+{
+    RedisRespRes redisRespInt = RedisRespRes { .integer_ = 3 };
+    RedisRespRes redisRespHello = RedisRespRes { .string_ = "HELLO" };
+    RedisRespRes redisRespArr = RedisRespRes { .array_ = std::vector<RedisRespRes> { redisRespHello, redisRespInt } };
+    EXPECT_EQ(redisRespArr, rh.decode("*2\r\n$5\r\nHELLO\r\n:3\r\n\r\n").second);
 }

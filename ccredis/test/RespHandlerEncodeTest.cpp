@@ -139,7 +139,7 @@ TEST_F(RespHandlerEncodeTest, map)
     rh.beginMap(2);
     rh.appendKV("first", 1);
     rh.appendKV("second", 2);
-    std::vector<char> result { '%', '2', '\r', '\n'};
+    std::vector<char> result { '%', '2', '\r', '\n' };
     appendChars(result, "$5\r\nfirst");
     appendCRLF(result);
     result.push_back(':');
