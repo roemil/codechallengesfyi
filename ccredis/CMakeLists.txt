@@ -21,7 +21,7 @@ set(CMAKE_BUILD_TYPE Debug)
 
 add_executable(
     RESP_SUITE
-    src/RespHandler.cpp
+    src/RespDecoder.cpp
     src/RespEncoder.cpp
     src/CommandHandler.cpp
     test/RespHandlerEncodeTest.cpp
@@ -31,7 +31,7 @@ add_executable(
 
 add_executable(
     server
-    src/RespHandler.cpp
+    src/RespDecoder.cpp
     src/RespEncoder.cpp
     src/CommandHandler.cpp
     src/Server.cpp

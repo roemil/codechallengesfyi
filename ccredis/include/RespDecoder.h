@@ -14,7 +14,7 @@
 using PayloadT = std::variant<int, std::string_view>;
 struct RedisRespRes;
 
-class RespHandler {
+class RespDecoder {
 public:
     [[nodiscard]] static std::pair<size_t, RedisRespRes> decode(const std::string_view str);
 

@@ -5,12 +5,12 @@
 #include <string_view>
 #include <vector>
 
-#include "RespHandler.h"
+#include "RespDecoder.h"
 #include "Resp.h"
 
 class RespHandlerDecodeTest : public testing::Test {
 protected:
-    RespHandler rh {};
+    RespDecoder rh {};
 };
 
 TEST_F(RespHandlerDecodeTest, SimpleString)

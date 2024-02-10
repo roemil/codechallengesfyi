@@ -1,4 +1,4 @@
-#include "RespHandler.h"
+#include "RespDecoder.h"
 
 #include "CommandHandler.h"
 #include "Resp.h"
@@ -14,7 +14,7 @@
 #include <vector>
 // #include <ranges> todo upgrade compiler
 
-std::pair<size_t, RedisRespRes> RespHandler::decodeSimpleString(const std::string_view str)
+std::pair<size_t, RedisRespRes> RespDecoder::decodeSimpleString(const std::string_view str)
 {
     const auto crlfPos = str.find("\r\n");
 
@@ -24,7 +24,7 @@ std::pair<size_t, RedisRespRes> RespHandler::decodeSimpleString(const std::strin
     return { crlfPos, RedisRespRes { .string_ = str.substr(1, crlfPos - 1) } };
 }
 
-std::pair<size_t, RedisRespRes> RespHandler::decodeBulkString(const std::string_view str)
+std::pair<size_t, RedisRespRes> RespDecoder::decodeBulkString(const std::string_view str)
 {
     const auto lengthDelim = str.find_first_of("\r\n");
     if (lengthDelim == std::string::npos) {
@@ -51,7 +51,7 @@ std::pair<size_t, RedisRespRes> RespHandler::decodeBulkString(const std::string_
     return { endDelim, RedisRespRes { .string_ = str.substr(lengthDelim + 2, length) } };
 }
 
-std::pair<size_t, RedisRespRes> RespHandler::decodeError(const std::string_view str)
+std::pair<size_t, RedisRespRes> RespDecoder::decodeError(const std::string_view str)
 {
     const auto crlfPos = str.find("\r\n");
     if (crlfPos == std::string::npos) {
@@ -61,7 +61,7 @@ std::pair<size_t, RedisRespRes> RespHandler::decodeError(const std::string_view 
     return { crlfPos, RedisRespRes { .error_ = str.substr(1, crlfPos - 1) } };
 }
 
-std::pair<size_t, RedisRespRes> RespHandler::decodeInt(const std::string_view str)
+std::pair<size_t, RedisRespRes> RespDecoder::decodeInt(const std::string_view str)
 {
     const auto crlfPos = str.find("\r\n");
     if (crlfPos == std::string::npos) {
@@ -72,7 +72,7 @@ std::pair<size_t, RedisRespRes> RespHandler::decodeInt(const std::string_view st
     return { crlfPos, RedisRespRes { .integer_ = std::stoi(decodedInt.data()) } };
 }
 
-std::pair<size_t, RedisRespRes> RespHandler::decodeArray(const std::string_view str)
+std::pair<size_t, RedisRespRes> RespDecoder::decodeArray(const std::string_view str)
 {
     const auto arrLenDel = str.find_first_of("\r\n");
     int arrLen {};
@@ -91,7 +91,7 @@ std::pair<size_t, RedisRespRes> RespHandler::decodeArray(const std::string_view 
     return { startPos, RedisRespRes { .array_ = result } };
 }
 
-std::pair<size_t, RedisRespRes> RespHandler::decodeMap(const std::string_view str)
+std::pair<size_t, RedisRespRes> RespDecoder::decodeMap(const std::string_view str)
 {
     const auto mapLenDel = str.find_first_of("\r\n");
     int mapLen {};
@@ -118,7 +118,7 @@ std::pair<size_t, RedisRespRes> RespHandler::decodeMap(const std::string_view st
     return { startPos, RedisRespRes { .map_ = result } };
 }
 
-std::pair<size_t, RedisRespRes> RespHandler::decode(const std::string_view str)
+std::pair<size_t, RedisRespRes> RespDecoder::decode(const std::string_view str)
 {
     // TODO: Implement sets
     std::cout << __PRETTY_FUNCTION__ << " str= " << str;
@@ -140,7 +140,7 @@ std::pair<size_t, RedisRespRes> RespHandler::decode(const std::string_view str)
     return { -1, RedisRespRes {} };
 }
 
-CommandVariant RespHandler::parseRawCommand(const std::string_view rawCommand)
+CommandVariant RespDecoder::parseRawCommand(const std::string_view rawCommand)
 {
     std::cout << "RawCommand: " << rawCommand << ".\n";
     if (rawCommand == "PING") {
@@ -151,7 +151,7 @@ CommandVariant RespHandler::parseRawCommand(const std::string_view rawCommand)
     return CommandUnknown {};
 }
 
-CommandVariant RespHandler::parseRawArrayCommands(const std::vector<RedisRespRes>& commandArray)
+CommandVariant RespDecoder::parseRawArrayCommands(const std::vector<RedisRespRes>& commandArray)
 {
     // Command cmd {};
     const auto rawKind = commandArray[0].string_;
@@ -176,7 +176,7 @@ CommandVariant RespHandler::parseRawArrayCommands(const std::vector<RedisRespRes
     return cmd;
 }
 
-std::vector<CommandVariant> RespHandler::convertToCommands(const RedisRespRes& rawCommands)
+std::vector<CommandVariant> RespDecoder::convertToCommands(const RedisRespRes& rawCommands)
 {
     std::vector<CommandVariant> commands {};
     if (rawCommands.string_.has_value()) {

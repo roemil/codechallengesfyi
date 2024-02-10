@@ -2,7 +2,7 @@
 
 #include "CommandHandler.h"
 #include "RespEncoder.h"
-#include "RespHandler.h"
+#include "RespDecoder.h"
 #include "Resp.h"
 
 #include <algorithm>
@@ -79,10 +79,10 @@ Build a response and send that out
 
 void handleInput(int clientFd, const std::string_view str)
 {
-    RespHandler rh {};
+    RespDecoder rd {};
     try {
-        const auto rawCmd = rh.decode(str);
-        const auto cmds = rh.convertToCommands(rawCmd.second);
+        const auto rawCmd = rd.decode(str);
+        const auto cmds = rd.convertToCommands(rawCmd.second);
         RespEncoder re {};
         for (const auto& cmd : cmds) {
             std::visit(re, cmd);

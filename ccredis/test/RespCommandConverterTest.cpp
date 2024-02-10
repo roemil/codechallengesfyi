@@ -1,4 +1,4 @@
-#include "RespHandler.h"
+#include "RespDecoder.h"
 #include "Resp.h"
 
 #include <optional>
@@ -9,7 +9,7 @@
 
 class RespCommandConverterTest : public testing::Test {
 protected:
-    RespHandler rh {};
+    RespDecoder rh {};
 };
 
 TEST_F(RespCommandConverterTest, UnknownCommand)
