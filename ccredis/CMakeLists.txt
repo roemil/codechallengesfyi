@@ -24,6 +24,7 @@ add_executable(
     src/RespDecoder.cpp
     src/RespEncoder.cpp
     src/CommandHandler.cpp
+    src/Resp.cpp
     test/RespHandlerEncodeTest.cpp
     test/RespHandlerDecodeTest.cpp
     test/RespCommandConverterTest.cpp
@@ -32,6 +33,7 @@ add_executable(
 add_executable(
     server
     src/RespDecoder.cpp
+    src/Resp.cpp
     src/RespEncoder.cpp
     src/CommandHandler.cpp
     src/Server.cpp
