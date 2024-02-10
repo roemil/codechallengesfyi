@@ -1,6 +1,9 @@
 #include "Server.h"
 
+#include "CommandHandler.h"
+#include "RespEncoder.h"
 #include "RespHandler.h"
+#include "Resp.h"
 
 #include <algorithm>
 #include <array>
@@ -20,7 +23,6 @@
 #include <variant>
 #include <vector>
 
-// #define PORT "7676"
 #define PORT "6379"
 
 using servInfo = std::unique_ptr<addrinfo, decltype(&freeaddrinfo)>;
@@ -75,51 +77,17 @@ Build a command queue (for arrays)
 Build a response and send that out
 */
 
-void HandleCommand::operator()(const CommandUnknown&) const{
-    rh_.appendError("Unknown command. Prefix did not match any expected prefixes");
-}
-void HandleCommand::operator()(const CommandInvalid&) const{
-    rh_.appendError("Invalid Command");
-}
-void HandleCommand::operator()(const CommandPing&) const{
-    rh_.appendBulkstring("PONG");
-}
-void HandleCommand::operator()(const CommandHello& cmd) const{
-    if(cmd.version_ != "3"){
-        std::string error {"Version not supported: "};
-        rh_.appendError(error + cmd.version_.data());
-        return;
-    }
-    else if(cmd.version_.empty()){
-        rh_.appendError("Missing version");
-        return;
-    }
-    rh_.beginMap(3);
-    rh_.appendKV("server", "redis");
-    rh_.appendKV("version", "0.0.1");
-    rh_.appendKV("proto", 3);
-}
-void HandleCommand::operator()(const CommandSet&) const{
-    rh_.appendError("Unsupported command");
-}
-void HandleCommand::operator()(const CommandGet&) const{
-    rh_.appendError("Unsupported command");
-}
-
 void handleInput(int clientFd, const std::string_view str)
 {
     RespHandler rh {};
     try {
         const auto rawCmd = rh.decode(str);
         const auto cmds = rh.convertToCommands(rawCmd.second);
-        // for(const auto& cmd : cmds)
-        // {
-        //     std::cout << "[INFO]: Cmd: " << cmd << "\n";
-        // }
+        RespEncoder re {};
         for (const auto& cmd : cmds) {
-            std::visit(HandleCommand{rh}, cmd);
+            std::visit(re, cmd);
         }
-        sendData(clientFd, rh.getBuffer());
+        sendData(clientFd, re.getBuffer());
     } catch (const std::invalid_argument& e) {
         std::cout << "[INFO] Invalid argument: " << e.what() << "\n";
     }

@@ -22,6 +22,8 @@ set(CMAKE_BUILD_TYPE Debug)
 add_executable(
     RESP_SUITE
     src/RespHandler.cpp
+    src/RespEncoder.cpp
+    src/CommandHandler.cpp
     test/RespHandlerEncodeTest.cpp
     test/RespHandlerDecodeTest.cpp
     test/RespCommandConverterTest.cpp
@@ -30,6 +32,8 @@ add_executable(
 add_executable(
     server
     src/RespHandler.cpp
+    src/RespEncoder.cpp
+    src/CommandHandler.cpp
     src/Server.cpp
     )
 target_link_libraries(

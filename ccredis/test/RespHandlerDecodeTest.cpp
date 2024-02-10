@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "RespHandler.h"
+#include "Resp.h"
 
 class RespHandlerDecodeTest : public testing::Test {
 protected:

@@ -6,7 +6,7 @@
 #include <sys/types.h>
 #include <vector>
 
-#include "RespHandler.h"
+#include "RespEncoder.h"
 
 namespace {
 void appendCRLF(std::vector<char>& vec)
@@ -24,12 +24,12 @@ void appendChars(std::vector<char>& output, std::string_view input)
 
 } // namespace
 
-class RespHandlerEncodeTest : public testing::Test {
+class RespEncoderTest : public testing::Test {
 protected:
-    RespHandler rh {};
+    RespEncoder rh {};
 };
 
-TEST_F(RespHandlerEncodeTest, CRLFOnly)
+TEST_F(RespEncoderTest, CRLFOnly)
 {
     rh.appendSimpleString("");
     std::vector<char> result { '+' };
@@ -37,7 +37,7 @@ TEST_F(RespHandlerEncodeTest, CRLFOnly)
     EXPECT_EQ(result, rh.getBuffer());
 }
 
-TEST_F(RespHandlerEncodeTest, SimpleString)
+TEST_F(RespEncoderTest, SimpleString)
 {
     rh.appendSimpleString("OK");
     std::vector<char> result { '+', 'O', 'K' };
@@ -45,7 +45,7 @@ TEST_F(RespHandlerEncodeTest, SimpleString)
     EXPECT_EQ(result, rh.getBuffer());
 }
 
-TEST_F(RespHandlerEncodeTest, BulkString)
+TEST_F(RespEncoderTest, BulkString)
 {
     rh.appendBulkstring("OK");
     std::vector<char> result { '$', '2', '\r', '\n', 'O', 'K' };
@@ -53,7 +53,7 @@ TEST_F(RespHandlerEncodeTest, BulkString)
     EXPECT_EQ(result, rh.getBuffer());
 }
 
-TEST_F(RespHandlerEncodeTest, null)
+TEST_F(RespEncoderTest, null)
 {
     rh.appendNull();
     std::vector<char> result { '$', static_cast<char>(-1) };
@@ -61,12 +61,12 @@ TEST_F(RespHandlerEncodeTest, null)
     EXPECT_EQ(result, rh.getBuffer());
 }
 
-TEST_F(RespHandlerEncodeTest, SimpleStringIllegalCR)
+TEST_F(RespEncoderTest, SimpleStringIllegalCR)
 {
     EXPECT_THROW(rh.appendSimpleString("OK\r"), std::invalid_argument);
 }
 
-TEST_F(RespHandlerEncodeTest, Error)
+TEST_F(RespEncoderTest, Error)
 {
     constexpr std::string_view error { "Some Error Message" };
     rh.appendError(error);
@@ -76,7 +76,7 @@ TEST_F(RespHandlerEncodeTest, Error)
     EXPECT_EQ(result, rh.getBuffer());
 }
 
-TEST_F(RespHandlerEncodeTest, SmallInteger)
+TEST_F(RespEncoderTest, SmallInteger)
 {
     constexpr std::string_view n = "5";
     rh.appendInt(n);
@@ -86,7 +86,7 @@ TEST_F(RespHandlerEncodeTest, SmallInteger)
     EXPECT_EQ(result, rh.getBuffer());
 }
 
-TEST_F(RespHandlerEncodeTest, LargeInteger)
+TEST_F(RespEncoderTest, LargeInteger)
 {
     constexpr std::string_view n = "1000";
     rh.appendInt(n);
@@ -99,7 +99,7 @@ TEST_F(RespHandlerEncodeTest, LargeInteger)
     EXPECT_EQ(result, rh.getBuffer());
 }
 
-TEST_F(RespHandlerEncodeTest, ArraySingleInt)
+TEST_F(RespEncoderTest, ArraySingleInt)
 {
     constexpr std::string_view n = "1";
     rh.beginArray(1);
@@ -109,7 +109,7 @@ TEST_F(RespHandlerEncodeTest, ArraySingleInt)
     EXPECT_EQ(result, rh.getBuffer());
 }
 
-TEST_F(RespHandlerEncodeTest, ArraySingleSimpleString)
+TEST_F(RespEncoderTest, ArraySingleSimpleString)
 {
     rh.beginArray(1);
     rh.appendSimpleString("OK");
@@ -118,7 +118,7 @@ TEST_F(RespHandlerEncodeTest, ArraySingleSimpleString)
     EXPECT_EQ(result, rh.getBuffer());
 }
 
-TEST_F(RespHandlerEncodeTest, ArraySingleBulkString)
+TEST_F(RespEncoderTest, ArraySingleBulkString)
 {
     rh.beginArray(1);
     rh.appendBulkstring("OK");
@@ -127,14 +127,14 @@ TEST_F(RespHandlerEncodeTest, ArraySingleBulkString)
     EXPECT_EQ(result, rh.getBuffer());
 }
 
-TEST_F(RespHandlerEncodeTest, EmptyArray)
+TEST_F(RespEncoderTest, EmptyArray)
 {
     rh.beginArray(0);
     std::vector<char> result { '*', '0', '\r', '\n' };
     EXPECT_EQ(result, rh.getBuffer());
 }
 
-TEST_F(RespHandlerEncodeTest, map)
+TEST_F(RespEncoderTest, map)
 {
     rh.beginMap(2);
     rh.appendKV("first", 1);
