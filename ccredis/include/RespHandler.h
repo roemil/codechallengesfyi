@@ -5,6 +5,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <variant>
 #include <vector>
 #include <map>
 
@@ -17,24 +18,51 @@ enum class Prefix : char {
     MAP = '%'
 };
 
+enum class CommandKind {
+    UNKNOWN_COMMAND,
+    PING,
+    HELLO,
+    SET,
+    GET
+};
+
+using PayloadT = std::variant<int, std::string_view>;
+
+struct Command{
+    CommandKind kind_;
+    std::optional<std::vector<PayloadT>> payload_{};
+
+    friend bool operator==(const Command& lhs, const Command& rhs){
+        const bool equalKind = lhs.kind_ == rhs.kind_;
+        if(!equalKind){
+            return false;
+        }
+        // TODO: Fix comparison
+        // if(lhs.payload_.has_value() && rhs.payload_.has_value())
+        // {
+        //     return lhs.payload_ == rhs.payload_;
+        // }else {
+        //     return false;
+        // }
+        return true;
+    }
+};
+
 struct RedisRespRes {
-    // TODO: Make values optional
     std::optional<int> integer_ {};
-    std::optional<std::string_view> simpleString_ {};
-    std::optional<std::string_view> bulkString_ {};
+    std::optional<std::string_view> string_ {};
     std::optional<std::string_view> error_ {};
     std::optional<std::vector<RedisRespRes>> array_{};
     std::optional<std::map<std::string_view, RedisRespRes>> map_{};
 
     friend bool operator==(const RedisRespRes& lhs, const RedisRespRes& rhs)
     {
-        return lhs.integer_ == rhs.integer_ && lhs.simpleString_ == rhs.simpleString_ && lhs.bulkString_ == rhs.bulkString_ && lhs.error_ == rhs.error_ && lhs.array_ == rhs.array_;
+        return lhs.integer_ == rhs.integer_ && lhs.string_ == rhs.string_ && lhs.error_ == rhs.error_ && lhs.array_ == rhs.array_;
     }
 
     friend std::ostream& operator<<(std::ostream& os, const RedisRespRes& resp){
         os << "Int: " << resp.integer_.value_or(-1) << "\n";
-        os << "SimpleString: " << resp.simpleString_.value_or("") << "\n";
-        os << "BulkString: " << resp.bulkString_.value_or("") << "\n";
+        os << "String: " << resp.string_.value_or("") << "\n";
         os << "Error: " << resp.error_.value_or("") << "\n";
         if(resp.array_.has_value())
         {
@@ -60,6 +88,8 @@ public:
 
     [[nodiscard]] static std::pair<size_t, RedisRespRes> decode(const std::string_view str);
 
+    static std::vector<Command> convertToCommands(const RedisRespRes& rawCommands);
+
     const std::vector<char>& getBuffer() const;
 
 private:
@@ -73,4 +103,7 @@ private:
     static std::pair<size_t, RedisRespRes> decodeMap(const std::string_view str);
     // TODO: Replace with a output stringstream?
     std::vector<char> buffer {};
+
+    static Command parseRawCommand(const std::string_view rawCommand);
+    static Command parseRawArrayCommands(const std::vector<RedisRespRes>& commandArray);
 };

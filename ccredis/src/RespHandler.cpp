@@ -6,8 +6,10 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 #include <map>
+// #include <ranges> todo upgrade compiler
 
 void RespHandler::appendChars(const std::string_view str)
 {
@@ -97,7 +99,7 @@ std::pair<size_t, RedisRespRes> RespHandler::decodeSimpleString(const std::strin
     if (crlfPos == std::string::npos) {
         throw std::invalid_argument { "Missing CRLF in Simple String" };
     }
-    return { crlfPos, RedisRespRes { .simpleString_ = str.substr(1, crlfPos - 1) } };
+    return { crlfPos, RedisRespRes { .string_ = str.substr(1, crlfPos - 1) } };
 }
 
 std::pair<size_t, RedisRespRes> RespHandler::decodeBulkString(const std::string_view str)
@@ -108,7 +110,7 @@ std::pair<size_t, RedisRespRes> RespHandler::decodeBulkString(const std::string_
     }
 
     if (str.substr(1, lengthDelim - 1) == "-1") {
-        return { lengthDelim, RedisRespRes { .bulkString_ = "null" } };
+        return { lengthDelim, RedisRespRes { .string_ = "null" } };
     }
 
     int length {};
@@ -124,7 +126,7 @@ std::pair<size_t, RedisRespRes> RespHandler::decodeBulkString(const std::string_
     if (endDelim == lengthDelim) {
         throw std::invalid_argument { "Invalid format. End delimiter same as length delimiter" };
     }
-    return { endDelim, RedisRespRes { .bulkString_ = str.substr(lengthDelim + 2, length) } };
+    return { endDelim, RedisRespRes { .string_ = str.substr(lengthDelim + 2, length) } };
 }
 
 std::pair<size_t, RedisRespRes> RespHandler::decodeError(const std::string_view str)
@@ -181,11 +183,9 @@ std::pair<size_t, RedisRespRes> RespHandler::decodeMap(const std::string_view st
     for (int i = 0; i < mapLen; ++i) {
         const auto decodedKey = decode(str.substr(startPos));
         std::string_view key{};
-        if(decodedKey.second.simpleString_.has_value())
+        if(decodedKey.second.string_.has_value())
         {
-            key = decodedKey.second.simpleString_.value();
-        }else if (decodedKey.second.bulkString_.has_value()) {
-            key = decodedKey.second.bulkString_.value();
+            key = decodedKey.second.string_.value();
         }
         else {
             std::cout << "Expected key as string, got: " << decodedKey.second;
@@ -221,3 +221,62 @@ std::pair<size_t, RedisRespRes> RespHandler::decode(const std::string_view str)
 }
 
 const std::vector<char>& RespHandler::getBuffer() const { return buffer; }
+
+Command RespHandler::parseRawCommand(const std::string_view rawCommand){
+    if(rawCommand == "PING"){
+        return Command{.kind_ = CommandKind::PING};
+    }
+
+    if(rawCommand == "HELLO") {
+        return Command{.kind_ = CommandKind::HELLO};
+    }
+
+    // TODO Use std::expected??
+    return Command {.kind_ = CommandKind::UNKNOWN_COMMAND};
+}
+
+namespace {
+    PayloadT parsePayload(const RedisRespRes& payload){
+        if(payload.string_.has_value()){
+            return payload.string_.value();
+        }
+        else if(payload.integer_.has_value()){
+            return payload.integer_.value();
+        }
+        // TODO: Use std::expected
+        return 0;
+    }
+}
+
+Command RespHandler::parseRawArrayCommands(const std::vector<RedisRespRes>& commandArray){
+    Command cmd{};
+    const auto rawKind = commandArray[0].string_;
+    if(rawKind == "HELLO"){
+        cmd.kind_ = CommandKind::HELLO;
+    } else if(rawKind == "SET"){
+        cmd.kind_ = CommandKind::SET;
+    } else if(rawKind == "GET"){
+        cmd.kind_ = CommandKind::GET;
+    }
+    cmd.payload_ = std::vector<PayloadT>{};
+    for(auto it = commandArray.begin()+1; it != commandArray.end(); ++it)
+    //for(const auto& rawCommand : commandArray | std::views::drop(1))
+    {
+        cmd.payload_->push_back(parsePayload(*it));
+    }
+    return cmd;
+}
+
+std::vector<Command> RespHandler::convertToCommands(const RedisRespRes& rawCommands) {
+    std::vector<Command> commands{};
+    if(rawCommands.string_.has_value()){
+        commands.push_back(parseRawCommand(rawCommands.string_.value()));
+    }
+    else if (rawCommands.array_.has_value()) {
+        commands.push_back(parseRawArrayCommands(rawCommands.array_.value()));
+    }
+    else {
+        commands.push_back(Command{.kind_ = CommandKind::UNKNOWN_COMMAND});
+    }
+    return commands;
+}

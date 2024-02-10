@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.14)
 project(ccredis)
 
 # GoogleTest requires at least C++14
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 
 include(FetchContent)
 FetchContent_Declare(
@@ -24,6 +24,7 @@ add_executable(
     src/RespHandler.cpp
     test/RespHandlerEncodeTest.cpp
     test/RespHandlerDecodeTest.cpp
+    test/RespCommandConverterTest.cpp
     )
 
 add_executable(

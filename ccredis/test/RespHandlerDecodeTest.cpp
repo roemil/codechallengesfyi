@@ -15,13 +15,13 @@ protected:
 TEST_F(RespHandlerDecodeTest, SimpleString)
 {
     constexpr std::string_view simpleString = { "+OK\r\n" };
-    EXPECT_EQ(std::string_view { "OK" }, rh.decode(simpleString).second.simpleString_);
+    EXPECT_EQ(std::string_view { "OK" }, rh.decode(simpleString).second.string_);
 }
 
 TEST_F(RespHandlerDecodeTest, PingString)
 {
     constexpr std::string_view simpleString = { "+PING\r\n" };
-    EXPECT_EQ(std::string_view { "PING" }, rh.decode(simpleString).second.simpleString_);
+    EXPECT_EQ(std::string_view { "PING" }, rh.decode(simpleString).second.string_);
 }
 
 TEST_F(RespHandlerDecodeTest, IllegalString)
@@ -52,17 +52,17 @@ TEST_F(RespHandlerDecodeTest, IntegerPos)
 
 TEST_F(RespHandlerDecodeTest, BulkString)
 {
-    EXPECT_EQ(std::string_view { "ping" }, rh.decode("$4\r\nping\r\n").second.bulkString_);
+    EXPECT_EQ(std::string_view { "ping" }, rh.decode("$4\r\nping\r\n").second.string_);
 }
 
 TEST_F(RespHandlerDecodeTest, BulkStringLonger)
 {
-    EXPECT_EQ(std::string_view { "hello world" }, rh.decode("$11\r\nhello world\r\n").second.bulkString_);
+    EXPECT_EQ(std::string_view { "hello world" }, rh.decode("$11\r\nhello world\r\n").second.string_);
 }
 
 TEST_F(RespHandlerDecodeTest, Null)
 {
-    EXPECT_EQ(std::string_view { "null" }, rh.decode("$-1\r\n").second.bulkString_);
+    EXPECT_EQ(std::string_view { "null" }, rh.decode("$-1\r\n").second.string_);
 }
 
 TEST_F(RespHandlerDecodeTest, ArraySingleInt)
@@ -82,7 +82,7 @@ TEST_F(RespHandlerDecodeTest, ArrayTwoIntsBulkString)
 {
     RedisRespRes redisRespInt1 = RedisRespRes { .integer_ = 1 };
     RedisRespRes redisRespInt2 = RedisRespRes { .integer_ = 2 };
-    RedisRespRes redisRespBulkStr = RedisRespRes { .bulkString_ = "PING" };
+    RedisRespRes redisRespBulkStr = RedisRespRes { .string_ = "PING" };
     RedisRespRes redisRespArr = RedisRespRes { .array_ = std::vector<RedisRespRes> { redisRespInt1, redisRespBulkStr, redisRespInt2 } };
     EXPECT_EQ(redisRespArr, rh.decode("*3\r\n:1\r\n$4\r\nPING\r\n:2\r\n").second);
 }
@@ -91,7 +91,7 @@ TEST_F(RespHandlerDecodeTest, ArrayTwoIntsLongBulkString)
 {
     RedisRespRes redisRespInt1 = RedisRespRes { .integer_ = 1 };
     RedisRespRes redisRespInt2 = RedisRespRes { .integer_ = 2 };
-    RedisRespRes redisRespBulkStr = RedisRespRes { .bulkString_ = "hello world" };
+    RedisRespRes redisRespBulkStr = RedisRespRes { .string_ = "hello world" };
     RedisRespRes redisRespArr = RedisRespRes { .array_ = std::vector<RedisRespRes> { redisRespInt1, redisRespBulkStr, redisRespInt2 } };
     EXPECT_EQ(redisRespArr, rh.decode("*3\r\n:1\r\n$11\r\nhello world\r\n:2\r\n").second);
 }
