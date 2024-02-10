@@ -40,3 +40,10 @@ TEST_F(RespCommandConverterTest, SET)
     EXPECT_EQ("key", std::get<CommandSet>(commands[0]).key_);
     EXPECT_EQ("value", std::get<CommandSet>(commands[0]).value_);
 }
+
+TEST_F(RespCommandConverterTest, GET)
+{
+    RedisRespRes rawCommand { .array_ = std::vector<RedisRespRes> { RedisRespRes { .string_ { "GET" } }, RedisRespRes { .string_ { "key" } } } };
+    const auto commands = rh.convertToCommands(rawCommand);
+    EXPECT_EQ("key", std::get<CommandGet>(commands[0]).key_);
+}
