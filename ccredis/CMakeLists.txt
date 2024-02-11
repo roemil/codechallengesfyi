@@ -28,6 +28,7 @@ add_executable(
     test/RespHandlerEncodeTest.cpp
     test/RespHandlerDecodeTest.cpp
     test/RespCommandConverterTest.cpp
+    test/DbTest.cpp
     )
 
 add_executable(

@@ -1,12 +1,12 @@
+#include "RespEncoder.h"
 
-#include <gtest/gtest.h>
-
+#include <memory>
 #include <stdexcept>
 #include <string_view>
 #include <sys/types.h>
 #include <vector>
 
-#include "RespEncoder.h"
+#include <gtest/gtest.h>
 
 namespace {
 void appendCRLF(std::vector<char>& vec)

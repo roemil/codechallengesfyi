@@ -2,6 +2,7 @@
 
 #include <string_view>
 #include <vector>
+#include <memory>
 
 struct CommandUnknown;
 struct CommandInvalid;
@@ -9,9 +10,12 @@ struct CommandPing;
 struct CommandHello;
 struct CommandSet;
 struct CommandGet;
+class Db;
 
 class RespEncoder {
 public:
+    RespEncoder() = default;
+    RespEncoder(const std::shared_ptr<Db>& db) : db_(db) {}
     void appendSimpleString(const std::string_view str);
     void appendError(const std::string_view str);
     void appendInt(const std::string_view n);
@@ -34,4 +38,5 @@ private:
     void appendCRLF();
     void appendChars(const std::string_view str);
     std::vector<char> buffer {};
+    std::shared_ptr<Db> db_;
 };

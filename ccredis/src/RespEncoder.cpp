@@ -1,9 +1,11 @@
 #include "RespEncoder.h"
 #include "Commands.h"
+#include "Database.h"
 #include "Resp.h"
 
 #include <string>
 #include <string_view>
+#include <iostream>
 
 void RespEncoder::appendChars(const std::string_view str)
 {
@@ -117,11 +119,18 @@ void RespEncoder::operator()(const CommandHello& cmd)
     appendKV("version", "0.0.1");
     appendKV("proto", 3);
 }
-void RespEncoder::operator()(const CommandSet&)
+void RespEncoder::operator()(const CommandSet& cmd)
 {
-    appendError("Unsupported command");
+    db_->set(cmd.key_, cmd.value_);
+    appendSimpleString("OK");
 }
-void RespEncoder::operator()(const CommandGet&)
+void RespEncoder::operator()(const CommandGet& cmd)
 {
-    appendError("Unsupported command");
+    const auto& value_ = db_->get(cmd.key_);
+    if(value_.has_value()){
+        appendBulkstring(value_.value());
+    }
+    else {
+        appendError("Key not exist");
+    }
 }

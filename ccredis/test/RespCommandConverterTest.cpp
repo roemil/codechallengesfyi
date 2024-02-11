@@ -2,6 +2,7 @@
 #include "Resp.h"
 #include "RespDecoder.h"
 
+#include <memory>
 #include <optional>
 #include <string_view>
 #include <vector>

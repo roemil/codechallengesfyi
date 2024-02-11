@@ -4,6 +4,7 @@
 #include "Resp.h"
 #include "RespDecoder.h"
 #include "RespEncoder.h"
+#include "Database.h"
 
 #include <algorithm>
 #include <array>
@@ -22,6 +23,7 @@
 #include <sys/types.h>
 #include <variant>
 #include <vector>
+#include <memory>
 
 #define PORT "6379"
 
@@ -77,13 +79,13 @@ Build a command queue (for arrays)
 Build a response and send that out
 */
 
-void handleInput(int clientFd, const std::string_view str)
+void handleInput(int clientFd, const std::string_view str, std::shared_ptr<Db>& db)
 {
     RespDecoder rd {};
+    RespEncoder re {db};
     try {
         const auto rawCmd = rd.decode(str);
         const auto cmds = rd.convertToCommands(rawCmd.second);
-        RespEncoder re {};
         for (const auto& cmd : cmds) {
             std::visit(re, cmd);
         }
@@ -93,7 +95,7 @@ void handleInput(int clientFd, const std::string_view str)
     }
 }
 
-void handleClient(const int clientFd)
+void handleClient(const int clientFd, std::shared_ptr<Db>& db)
 {
     std::array<char, 1024> buf;
     while (true) {
@@ -109,7 +111,7 @@ void handleClient(const int clientFd)
         }
         std::cout << "[INFO] Received " + std::to_string(n) + " amount of bytes.\n";
         std::cout << "[INFO] Received msg: " + std::string { buf.data(), static_cast<size_t>(n) };
-        handleInput(clientFd, std::string_view { buf.data(), static_cast<size_t>(n) });
+        handleInput(clientFd, std::string_view { buf.data(), static_cast<size_t>(n) }, db);
     }
 }
 
@@ -133,10 +135,11 @@ int main()
     struct sockaddr_storage their_addr;
     socklen_t addr_size = sizeof their_addr;
     // TODO: Handle multiple clients
+    auto db = std::make_shared<Db>();
     while (true) {
 
         int clientFd = accept(sockfd, (struct sockaddr*)&their_addr, &addr_size);
         std::cout << "[INFO] Client connected\n";
-        handleClient(clientFd);
+        handleClient(clientFd, db);
     }
 }
