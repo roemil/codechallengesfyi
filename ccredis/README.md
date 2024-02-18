@@ -1,8 +1,16 @@
 ## Simple Redis server
 Work in progress<br>
 
-Currently support connection from redis-cli and the PING command.
+This server support concurrent connection from redis-cli.
+Supports the following commands:
+* PING
+* SET
+* GET 
 
-### TODO
-1. Store values in memory
-2. Use std::expected as error handling.
+### Benchmark
+* SET: 78125.00 requests per second, p50=0.359 msec                   
+* GET: 79302.14 requests per second, p50=0.367 msec
+
+### TOD
+1. Use std::expected as error handling.
+2. More commands.
