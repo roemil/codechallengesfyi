@@ -121,7 +121,7 @@ std::pair<size_t, RedisRespRes> RespDecoder::decodeMap(const std::string_view st
 std::pair<size_t, RedisRespRes> RespDecoder::decode(const std::string_view str)
 {
     // TODO: Implement sets
-    std::cout << __PRETTY_FUNCTION__ << " str= " << str;
+    //std::cout << __PRETTY_FUNCTION__ << " str= " << str;
     const auto prefix = static_cast<Prefix>(str[0]);
     switch (prefix) {
     case Prefix::SIMPLE_STRING:

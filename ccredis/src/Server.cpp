@@ -103,31 +103,27 @@ enum class ClientState{
     Connected
 };
 
+void logInfo(const std::string_view str)
+{
+    std::cout << "[INFO] " << str << "\n";
+}
 ClientState handleClient(const int clientFd, std::shared_ptr<Db>& db)
 {
     std::array<char, 1024> buf;
     while (true) {
         int n = recv(clientFd, buf.data(), 1024, 0);
-        for (int i = 0; i < n; i++) {
-            std::cout << std::setfill('0') << std::setw(2) << std::hex << +static_cast<char>(buf[i]) << " ";
-        }
-        std::cout << "\n";
         if (n == 0) {
             // client closed the connection
-            std::cout << "Client disconnected\n";
+            logInfo("Client disconnected");
             return ClientState::Disconnected;
         }
-        std::cout << "[INFO] Received " + std::to_string(n) + " amount of bytes.\n";
+        logInfo("Received " + std::to_string(n) + " amount of bytes");
         std::cout << "[INFO] Received msg: " + std::string { buf.data(), static_cast<size_t>(n) };
         handleInput(clientFd, std::string_view { buf.data(), static_cast<size_t>(n) }, db);
         return ClientState::Connected;
     }
 }
 
-void logInfo(const std::string_view str)
-{
-    std::cout << "[INFO] " << str << "\n";
-}
 
 int main()
 {
@@ -146,16 +142,11 @@ int main()
         perror("listen");
         exit(1);
     }
-    struct sockaddr_storage their_addr;
-    socklen_t addr_size = sizeof their_addr;
     auto db = std::make_shared<Db>();
 
     std::vector<pollfd> fdArray{};
     fdArray.reserve(5);
-    pollfd tmp{};
-    tmp.fd = sockfd;
-    tmp.events = POLL_IN;
-    fdArray.push_back(tmp);
+    fdArray.emplace_back(pollfd{.fd = sockfd, .events = POLL_IN});
 
     while (true) {
         logInfo("Waiting for poll...");
@@ -170,11 +161,10 @@ int main()
             if(pollFd.revents & POLL_IN){
                 if(pollFd.fd == sockfd){
                     logInfo("Client connected. Fd= " + std::to_string(pollFd.fd));
+                    struct sockaddr_storage their_addr;
+                    socklen_t addr_size = sizeof their_addr;
                     int clientFd = accept(sockfd, (struct sockaddr*)&their_addr, &addr_size);
-                    pollfd tmp{};
-                    tmp.fd = clientFd;
-                    tmp.events = POLL_IN;
-                    fdArray.push_back(tmp);    
+                    fdArray.emplace_back(pollfd{.fd = clientFd, .events = POLL_IN});
                 }
                 else {
                     const auto state = handleClient(pollFd.fd, db);
