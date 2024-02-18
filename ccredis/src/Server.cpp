@@ -32,7 +32,7 @@
 
 using servInfo = std::unique_ptr<addrinfo, decltype(&freeaddrinfo)>;
 
-std::unique_ptr<addrinfo, decltype(&freeaddrinfo)> getAddrInfo()
+std::unique_ptr<addrinfo, decltype(&freeaddrinfo)> getAddrInfo(const std::string_view port)
 {
     struct addrinfo hints;
     struct addrinfo* servinfo;
@@ -43,7 +43,7 @@ std::unique_ptr<addrinfo, decltype(&freeaddrinfo)> getAddrInfo()
     hints.ai_flags = AI_PASSIVE; // fill in my IP for me
 
     int status;
-    if ((status = getaddrinfo(NULL, PORT, &hints, &servinfo)) != 0) {
+    if ((status = getaddrinfo(NULL, port.data(), &hints, &servinfo)) != 0) {
         fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
         exit(1);
     }
@@ -51,11 +51,11 @@ std::unique_ptr<addrinfo, decltype(&freeaddrinfo)> getAddrInfo()
     return servinfoPtr;
 }
 
-int getSocket(const addrinfo& addrI)
+int createListener(const addrinfo& addrInfo)
 {
-    int sockfd = socket(addrI.ai_family, addrI.ai_socktype, addrI.ai_protocol);
+    int sockfd = socket(addrInfo.ai_family, addrInfo.ai_socktype, addrInfo.ai_protocol);
     // lose the pesky "Address already in use" error message
-    int yes = 1;
+    constexpr int yes = 1;
     if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == -1) {
         perror("setsockopt");
         exit(1);
@@ -63,15 +63,20 @@ int getSocket(const addrinfo& addrI)
     return sockfd;
 }
 
-void sendData(int clientFd, std::vector<char> buffer)
+void logInfo(const std::string_view str)
+{
+    std::cout << "[INFO] " << str << "\n";
+}
+
+void sendData(int clientFd, const std::vector<char>& buffer)
 {
     int res = send(clientFd, buffer.data(), buffer.size(), 0);
     if (res == -1) {
         perror("send");
     } else if (static_cast<size_t>(res) != buffer.size()) {
-        std::cout << "[INFO] Sent not all bytes " + std::to_string(res) + " \n";
+        logInfo("All bytes were not sent " + std::to_string(res));
     } else {
-        std::cout << "[INFO] Sent " + std::to_string(res) + " amount of bytes.\n";
+        logInfo("Sent " + std::to_string(res) + " amount of bytes.");
     }
 }
 
@@ -82,32 +87,22 @@ Build a command queue (for arrays)
 Build a response and send that out
 */
 
-void handleInput(int clientFd, const std::string_view str, std::shared_ptr<Db>& db)
+void RedisServer::handleInput(int clientFd, const std::string_view str)
 {
-    RespDecoder rd {};
-    RespEncoder re {db};
     try {
-        const auto rawCmd = rd.decode(str);
-        const auto cmds = rd.convertToCommands(rawCmd.second);
+        const auto rawCmd = respDecoder_.decode(str);
+        const auto cmds = respDecoder_.convertToCommands(rawCmd.second);
         for (const auto& cmd : cmds) {
-            std::visit(re, cmd);
+            std::visit(respEncoder_, cmd);
         }
-        sendData(clientFd, re.getBuffer());
+        sendData(clientFd, respEncoder_.getBuffer());
+        respEncoder_.clearBuffer();
     } catch (const std::invalid_argument& e) {
-        std::cout << "[INFO] Invalid argument: " << e.what() << "\n";
+        logInfo("Invalid argument: " + std::string{e.what()});
     }
 }
 
-enum class ClientState{
-    Disconnected,
-    Connected
-};
-
-void logInfo(const std::string_view str)
-{
-    std::cout << "[INFO] " << str << "\n";
-}
-ClientState handleClient(const int clientFd, std::shared_ptr<Db>& db)
+ClientState RedisServer::handleClient(const int clientFd)
 {
     std::array<char, 1024> buf;
     while (true) {
@@ -118,65 +113,77 @@ ClientState handleClient(const int clientFd, std::shared_ptr<Db>& db)
             return ClientState::Disconnected;
         }
         logInfo("Received " + std::to_string(n) + " amount of bytes");
-        std::cout << "[INFO] Received msg: " + std::string { buf.data(), static_cast<size_t>(n) };
-        handleInput(clientFd, std::string_view { buf.data(), static_cast<size_t>(n) }, db);
+        logInfo("Received msg: " + std::string { buf.data(), static_cast<size_t>(n) });
+        handleInput(clientFd, std::string_view { buf.data(), static_cast<size_t>(n) });
         return ClientState::Connected;
     }
 }
 
+int acceptNewClient(int listener)
+{
+    struct sockaddr_storage their_addr;
+                    socklen_t addr_size = sizeof their_addr;
+    int clientFd = accept(listener, (struct sockaddr*)&their_addr, &addr_size);
+    return clientFd;
+}
 
-int main()
+void RedisServer::start(const std::string_view port)
 {
     // servinfo now points to a linked list of 1 or more struct addrinfos
-    const auto servinfo = getAddrInfo();
-    int sockfd = getSocket(*servinfo);
+    const auto servinfo = getAddrInfo(port);
+    int listener = createListener(*servinfo);
 
-    int bindResult = bind(sockfd, servinfo->ai_addr, servinfo->ai_addrlen);
+    int bindResult = bind(listener, servinfo->ai_addr, servinfo->ai_addrlen);
     if (bindResult == -1) {
         perror("bind");
         exit(1);
     }
 
-    int err = listen(sockfd, 20);
+    constexpr int maxClients = 50;
+    int err = listen(listener, maxClients);
     if (err != 0) {
         perror("listen");
         exit(1);
     }
-    auto db = std::make_shared<Db>();
 
-    std::vector<pollfd> fdArray{};
-    fdArray.reserve(5);
-    fdArray.emplace_back(pollfd{.fd = sockfd, .events = POLL_IN});
+    fds_.reserve(maxClients);
+    fds_.emplace_back(pollfd{.fd = listener, .events = POLL_IN});
 
     while (true) {
         logInfo("Waiting for poll...");
-        int pollCount = poll(fdArray.data(), fdArray.size(), -1);
+        int pollCount = poll(fds_.data(), fds_.size(), -1);
         logInfo("Polled: " + std::to_string(pollCount));
         if (pollCount == -1){
             perror("poll");
             exit(1);
         }
 
-        for(const auto pollFd : fdArray){
+        for(const auto pollFd : fds_){
             if(pollFd.revents & POLL_IN){
-                if(pollFd.fd == sockfd){
+                if(pollFd.fd == listener){
                     logInfo("Client connected. Fd= " + std::to_string(pollFd.fd));
-                    struct sockaddr_storage their_addr;
-                    socklen_t addr_size = sizeof their_addr;
-                    int clientFd = accept(sockfd, (struct sockaddr*)&their_addr, &addr_size);
-                    fdArray.emplace_back(pollfd{.fd = clientFd, .events = POLL_IN});
+                    int clientFd = acceptNewClient(listener);
+                    fds_.emplace_back(pollfd{.fd = clientFd, .events = POLL_IN});
                 }
                 else {
-                    const auto state = handleClient(pollFd.fd, db);
+                    const auto state = handleClient(pollFd.fd);
                     if (state == ClientState::Disconnected){
                         auto fdToRemove = pollFd.fd;
-                        fdArray.erase(std::remove_if(fdArray.begin(), fdArray.end(), [fdToRemove](pollfd fdElem){
+                        fds_.erase(std::remove_if(fds_.begin(), fds_.end(), [fdToRemove](pollfd fdElem){
                             return fdElem.fd == fdToRemove;
-                        }), fdArray.end());
+                        }), fds_.end());
                     }
                 }
             }
         }
 
     }
+}
+
+
+int main()
+{
+    RedisServer server{std::make_shared<Db>()};
+    server.start(PORT);
+    
 }

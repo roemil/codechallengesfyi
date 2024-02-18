@@ -27,6 +27,7 @@ public:
     void appendKV(const std::string_view key, const int val);
 
     const std::vector<char>& getBuffer() const;
+    void clearBuffer() {buffer.clear();}
     void operator()(const CommandUnknown&);
     void operator()(const CommandInvalid&);
     void operator()(const CommandPing&);
