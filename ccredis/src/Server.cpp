@@ -18,12 +18,15 @@
 #include <memory>
 #include <netdb.h>
 #include <stdexcept>
+#include <string>
 #include <string_view>
+#include <sys/signal.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <variant>
 #include <vector>
 #include <memory>
+#include <poll.h>
 
 #define PORT "6379"
 
@@ -95,7 +98,12 @@ void handleInput(int clientFd, const std::string_view str, std::shared_ptr<Db>& 
     }
 }
 
-void handleClient(const int clientFd, std::shared_ptr<Db>& db)
+enum class ClientState{
+    Disconnected,
+    Connected
+};
+
+ClientState handleClient(const int clientFd, std::shared_ptr<Db>& db)
 {
     std::array<char, 1024> buf;
     while (true) {
@@ -107,12 +115,18 @@ void handleClient(const int clientFd, std::shared_ptr<Db>& db)
         if (n == 0) {
             // client closed the connection
             std::cout << "Client disconnected\n";
-            return;
+            return ClientState::Disconnected;
         }
         std::cout << "[INFO] Received " + std::to_string(n) + " amount of bytes.\n";
         std::cout << "[INFO] Received msg: " + std::string { buf.data(), static_cast<size_t>(n) };
         handleInput(clientFd, std::string_view { buf.data(), static_cast<size_t>(n) }, db);
+        return ClientState::Connected;
     }
+}
+
+void logInfo(const std::string_view str)
+{
+    std::cout << "[INFO] " << str << "\n";
 }
 
 int main()
@@ -134,12 +148,45 @@ int main()
     }
     struct sockaddr_storage their_addr;
     socklen_t addr_size = sizeof their_addr;
-    // TODO: Handle multiple clients
     auto db = std::make_shared<Db>();
-    while (true) {
 
-        int clientFd = accept(sockfd, (struct sockaddr*)&their_addr, &addr_size);
-        std::cout << "[INFO] Client connected\n";
-        handleClient(clientFd, db);
+    std::vector<pollfd> fdArray{};
+    fdArray.reserve(5);
+    pollfd tmp{};
+    tmp.fd = sockfd;
+    tmp.events = POLL_IN;
+    fdArray.push_back(tmp);
+
+    while (true) {
+        logInfo("Waiting for poll...");
+        int pollCount = poll(fdArray.data(), fdArray.size(), -1);
+        logInfo("Polled: " + std::to_string(pollCount));
+        if (pollCount == -1){
+            perror("poll");
+            exit(1);
+        }
+
+        for(const auto pollFd : fdArray){
+            if(pollFd.revents & POLL_IN){
+                if(pollFd.fd == sockfd){
+                    logInfo("Client connected. Fd= " + std::to_string(pollFd.fd));
+                    int clientFd = accept(sockfd, (struct sockaddr*)&their_addr, &addr_size);
+                    pollfd tmp{};
+                    tmp.fd = clientFd;
+                    tmp.events = POLL_IN;
+                    fdArray.push_back(tmp);    
+                }
+                else {
+                    const auto state = handleClient(pollFd.fd, db);
+                    if (state == ClientState::Disconnected){
+                        auto fdToRemove = pollFd.fd;
+                        fdArray.erase(std::remove_if(fdArray.begin(), fdArray.end(), [fdToRemove](pollfd fdElem){
+                            return fdElem.fd == fdToRemove;
+                        }), fdArray.end());
+                    }
+                }
+            }
+        }
+
     }
 }
