@@ -3,6 +3,7 @@
 #include "Resp.h"
 
 #include <string>
+#include <cassert>
 
 void ParsePayload::operator()(CommandUnknown&)
 {

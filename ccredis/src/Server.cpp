@@ -147,7 +147,7 @@ void RedisServer::start(const std::string_view port)
     }
 
     fds_.reserve(maxClients);
-    fds_.emplace_back(pollfd{.fd = listener, .events = POLL_IN});
+    fds_.emplace_back(pollfd{.fd = listener, .events = POLL_IN, .revents = 0});
 
     while (true) {
         logInfo("Waiting for poll...");
@@ -163,7 +163,7 @@ void RedisServer::start(const std::string_view port)
                 if(pollFd.fd == listener){
                     logInfo("Client connected. Fd= " + std::to_string(pollFd.fd));
                     int clientFd = acceptNewClient(listener);
-                    fds_.emplace_back(pollfd{.fd = clientFd, .events = POLL_IN});
+                    fds_.emplace_back(pollfd{.fd = clientFd, .events = POLL_IN, .revents = 0});
                 }
                 else {
                     const auto state = handleClient(pollFd.fd);
