@@ -11,6 +11,7 @@ Supports the following commands:
 * SET: 78125.00 requests per second, p50=0.359 msec                   
 * GET: 79302.14 requests per second, p50=0.367 msec
 
-### TOD
+### TODO
+0. Use a hashed key
 1. Use std::expected as error handling.
 2. More commands.
