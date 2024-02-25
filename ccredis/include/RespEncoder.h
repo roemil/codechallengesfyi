@@ -10,6 +10,7 @@ struct CommandPing;
 struct CommandHello;
 struct CommandSet;
 struct CommandGet;
+struct CommandExists;
 class Db;
 
 class RespEncoder {
@@ -34,6 +35,7 @@ public:
     void operator()(const CommandHello&);
     void operator()(const CommandSet&);
     void operator()(const CommandGet&);
+    void operator()(const CommandExists&);
 
 private:
     void appendCRLF();

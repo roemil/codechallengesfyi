@@ -9,6 +9,8 @@ struct CommandPing;
 struct CommandHello;
 struct CommandSet;
 struct CommandGet;
+struct CommandExists;
+
 struct RedisRespRes;
 class RespEncoder;
 
@@ -28,4 +30,5 @@ struct ParsePayload {
     void operator()(CommandHello&);
     void operator()(CommandSet&);
     void operator()(CommandGet&);
+    void operator()(CommandExists&);
 };

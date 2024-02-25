@@ -29,8 +29,6 @@ private:
     static std::pair<size_t, RedisRespRes> decodeBulkString(const std::string_view str);
     static std::pair<size_t, RedisRespRes> decodeArray(const std::string_view str);
     static std::pair<size_t, RedisRespRes> decodeMap(const std::string_view str);
-    // TODO: Replace with a output stringstream?
-    std::vector<char> buffer {};
 
     static CommandVariant parseRawCommand(const std::string_view rawCommand);
     static CommandVariant parseRawArrayCommands(const std::vector<RedisRespRes>& commandArray);

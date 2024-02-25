@@ -12,7 +12,7 @@
 #include <string_view>
 #include <variant>
 #include <vector>
-// #include <ranges> todo upgrade compiler
+#include <ranges>
 
 std::pair<size_t, RedisRespRes> RespDecoder::decodeSimpleString(const std::string_view str)
 {
@@ -21,7 +21,7 @@ std::pair<size_t, RedisRespRes> RespDecoder::decodeSimpleString(const std::strin
     if (crlfPos == std::string::npos) {
         throw std::invalid_argument { "Missing CRLF in Simple String" };
     }
-    return { crlfPos, RedisRespRes { .string_ = str.substr(1, crlfPos - 1) } };
+    return { crlfPos+2, RedisRespRes { .string_ = str.substr(1, crlfPos - 1) } };
 }
 
 std::pair<size_t, RedisRespRes> RespDecoder::decodeBulkString(const std::string_view str)
@@ -32,7 +32,7 @@ std::pair<size_t, RedisRespRes> RespDecoder::decodeBulkString(const std::string_
     }
 
     if (str.substr(1, lengthDelim - 1) == "-1") {
-        return { lengthDelim, RedisRespRes { .string_ = "null" } };
+        return { lengthDelim+2, RedisRespRes { .string_ = "null" } };
     }
 
     int length {};
@@ -48,7 +48,12 @@ std::pair<size_t, RedisRespRes> RespDecoder::decodeBulkString(const std::string_
     if (endDelim == lengthDelim) {
         throw std::invalid_argument { "Invalid format. End delimiter same as length delimiter" };
     }
-    return { endDelim, RedisRespRes { .string_ = str.substr(lengthDelim + 2, length) } };
+    const auto substr = str.substr(lengthDelim + 2, length);
+    if(substr.find("\r\n") != std::string_view::npos)
+    {
+        throw std::invalid_argument { "Still CRLF..." + std::string{substr.data()} };
+    }
+    return { endDelim+2, RedisRespRes { .string_ = substr} };
 }
 
 std::pair<size_t, RedisRespRes> RespDecoder::decodeError(const std::string_view str)
@@ -58,7 +63,7 @@ std::pair<size_t, RedisRespRes> RespDecoder::decodeError(const std::string_view 
         throw std::invalid_argument { "Missing CRLF in Simple String" };
     }
 
-    return { crlfPos, RedisRespRes { .error_ = str.substr(1, crlfPos - 1) } };
+    return { crlfPos+2, RedisRespRes { .error_ = str.substr(1, crlfPos - 1) } };
 }
 
 std::pair<size_t, RedisRespRes> RespDecoder::decodeInt(const std::string_view str)
@@ -69,7 +74,7 @@ std::pair<size_t, RedisRespRes> RespDecoder::decodeInt(const std::string_view st
     }
     std::string_view decodedInt = str.substr(1, crlfPos - 1);
     // TODO: Verify value is integer with regex
-    return { crlfPos, RedisRespRes { .integer_ = std::stoi(decodedInt.data()) } };
+    return { crlfPos+2, RedisRespRes { .integer_ = std::stoi(decodedInt.data()) } };
 }
 
 std::pair<size_t, RedisRespRes> RespDecoder::decodeArray(const std::string_view str)
@@ -86,7 +91,7 @@ std::pair<size_t, RedisRespRes> RespDecoder::decodeArray(const std::string_view 
     for (int i = 0; i < arrLen; ++i) {
         const auto decodedVal = decode(str.substr(startPos));
         result.push_back(decodedVal.second);
-        startPos += decodedVal.first + 2;
+        startPos += decodedVal.first;
     }
     return { startPos, RedisRespRes { .array_ = result } };
 }
@@ -111,11 +116,11 @@ std::pair<size_t, RedisRespRes> RespDecoder::decodeMap(const std::string_view st
             std::cout << "Expected key as string, got: " << decodedKey.second;
             assert(false);
         }
-        startPos += decodedKey.first + 2;
+        startPos += decodedKey.first;
         const auto decodedVal = decode(str.substr(startPos));
         result[key] = decodedVal.second;
     }
-    return { startPos, RedisRespRes { .map_ = result } };
+    return { startPos+2, RedisRespRes { .map_ = result } };
 }
 
 std::pair<size_t, RedisRespRes> RespDecoder::decode(const std::string_view str)
@@ -137,7 +142,7 @@ std::pair<size_t, RedisRespRes> RespDecoder::decode(const std::string_view str)
     case Prefix::MAP:
         return decodeMap(str);
     }
-    return { -1, RedisRespRes {} };
+    return { -11, RedisRespRes {} };
 }
 
 CommandVariant RespDecoder::parseRawCommand(const std::string_view rawCommand)
@@ -164,14 +169,16 @@ CommandVariant RespDecoder::parseRawArrayCommands(const std::vector<RedisRespRes
         cmd = CommandGet {};
     } else if (rawKind == "PING") {
         cmd = CommandPing {};
-    } else {
+    } else if (rawKind == "EXISTS") {
+        cmd = CommandExists{};
+    }
+    else {
         cmd = CommandInvalid {};
     }
 
-    for (auto it = commandArray.begin() + 1; it != commandArray.end(); ++it)
-    // for(const auto& rawCommand : commandArray | std::views::drop(1))
+    for(const auto& rawCommand : commandArray | std::views::drop(1))
     {
-        std::visit(ParsePayload { *it }, cmd);
+        std::visit(ParsePayload { rawCommand }, cmd);
     }
     return cmd;
 }

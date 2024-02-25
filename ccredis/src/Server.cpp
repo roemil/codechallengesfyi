@@ -104,13 +104,19 @@ void RedisServer::handleInput(int clientFd, const std::string_view str)
 
 ClientState RedisServer::handleClient(const int clientFd)
 {
-    std::array<char, 1024> buf;
+    std::array<char, 1024> buf{};
     while (true) {
         int n = recv(clientFd, buf.data(), 1024, 0);
         if (n == 0) {
             // client closed the connection
             logInfo("Client disconnected");
             return ClientState::Disconnected;
+        }
+        if (n < 0)
+        {
+            logInfo("Received " + std::to_string(n) + " . There is an error");
+            // Remove client.
+            return ClientState::Disconnected;    
         }
         logInfo("Received " + std::to_string(n) + " amount of bytes");
         logInfo("Received msg: " + std::string { buf.data(), static_cast<size_t>(n) });

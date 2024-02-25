@@ -9,8 +9,8 @@
 
 void RespEncoder::appendChars(const std::string_view str)
 {
-    for (const auto& c : str) {
-        buffer.push_back(static_cast<char>(c));
+    for (const auto c : str) {
+        buffer.push_back(c);
     }
 }
 
@@ -132,5 +132,15 @@ void RespEncoder::operator()(const CommandGet& cmd)
     }
     else {
         appendError("Key not exist");
+    }
+}
+void RespEncoder::operator()(const CommandExists& cmd)
+{
+    const auto& value_ = db_->get(cmd.key_);
+    if(value_.has_value()){
+        appendInt("1");
+    }
+    else {
+        appendInt("0");
     }
 }

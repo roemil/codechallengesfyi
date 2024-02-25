@@ -17,5 +17,8 @@ struct CommandSet {
 struct CommandGet {
     std::string_view key_;
 };
+struct CommandExists {
+    std::string_view key_;
+};
 
-using CommandVariant = std::variant<CommandUnknown, CommandInvalid, CommandPing, CommandHello, CommandSet, CommandGet>;
+using CommandVariant = std::variant<CommandUnknown, CommandInvalid, CommandPing, CommandHello, CommandSet, CommandGet, CommandExists>;

@@ -49,6 +49,9 @@ target_link_libraries(
     RESP_SUITE gtest_main
 )
 
+add_compile_options(-fsanitize=address)
+add_link_options(-fsanitize=address)
+
 include(GoogleTest)
 gtest_discover_tests(RESP_SUITE)
 
