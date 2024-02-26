@@ -1,6 +1,5 @@
 #include "Server.h"
 
-#include "CommandHandler.h"
 #include "Resp.h"
 #include "RespDecoder.h"
 #include "RespEncoder.h"

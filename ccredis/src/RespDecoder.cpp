@@ -1,6 +1,6 @@
 #include "RespDecoder.h"
 
-#include "CommandHandler.h"
+#include "CommandParsePayload.h"
 #include "Resp.h"
 
 #include <cassert>

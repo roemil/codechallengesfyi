@@ -29,7 +29,7 @@ add_executable(
     RESP_SUITE
     src/RespDecoder.cpp
     src/RespEncoder.cpp
-    src/CommandHandler.cpp
+    src/CommandParsePayload.cpp
     src/Resp.cpp
     test/RespHandlerEncodeTest.cpp
     test/RespHandlerDecodeTest.cpp
@@ -42,7 +42,7 @@ add_executable(
     src/RespDecoder.cpp
     src/Resp.cpp
     src/RespEncoder.cpp
-    src/CommandHandler.cpp
+    src/CommandParsePayload.cpp
     src/Server.cpp
     )
 target_link_libraries(
