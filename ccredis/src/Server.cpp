@@ -84,6 +84,11 @@ TODO:
 Handle Command function
 Build a command queue (for arrays)
 Build a response and send that out
+
+Possible build a lock-free queue.
+Server thread handles incoming request and puts them in queue
+Then a consumer thread consumes items in queue and sends out a response.
+
 */
 
 void RedisServer::handleInput(int clientFd, const std::string_view str)
@@ -92,7 +97,7 @@ void RedisServer::handleInput(int clientFd, const std::string_view str)
         const auto rawCmd = respDecoder_.decode(str);
         const auto cmds = respDecoder_.convertToCommands(rawCmd.second);
         for (const auto& cmd : cmds) {
-            std::visit(respEncoder_, cmd);
+            std::visit(commandHandler_, cmd);
         }
         sendData(clientFd, respEncoder_.getBuffer());
         respEncoder_.clearBuffer();

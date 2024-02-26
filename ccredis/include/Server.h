@@ -2,6 +2,7 @@
 
 #include "RespDecoder.h"
 #include "RespEncoder.h"
+#include "CommandHandler.h"
 #include <algorithm>
 #include <memory>
 #include <string_view>
@@ -22,10 +23,9 @@ class Db;
 class RedisServer
 {
     public:
-        RedisServer() = default;
         RedisServer(std::shared_ptr<Db>&& db) : db_(std::move(db)) {
             assert(db_);
-            respEncoder_ = RespEncoder{db_};
+            commandHandler_ = CommandHandler{&respEncoder_, db_};
         }
 
     void start(std::string_view port);
@@ -36,6 +36,7 @@ class RedisServer
     std::vector<pollfd> fds_{};
     RespDecoder respDecoder_{};
     RespEncoder respEncoder_{};
+    CommandHandler commandHandler_;
     std::shared_ptr<Db> db_{};
 
 
