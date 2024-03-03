@@ -11,8 +11,13 @@ void CommandHandler::operator()(const CommandUnknown &) {
 void CommandHandler::operator()(const CommandInvalid &) {
   encoder_->appendError("Invalid Command");
 }
-void CommandHandler::operator()(const CommandPing &) {
-  encoder_->appendBulkstring("PONG");
+void CommandHandler::operator()(const CommandPing & cmd) {
+  if(cmd.value_.empty())
+  {
+    encoder_->appendBulkstring("PONG");
+    return;
+  }
+  encoder_->appendBulkstring(cmd.value_);
 }
 void CommandHandler::operator()(const CommandHello &cmd) {
   if (cmd.version_ != "3") {

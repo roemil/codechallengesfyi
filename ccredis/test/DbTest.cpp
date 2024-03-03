@@ -25,16 +25,20 @@ TEST_F(DbTest, NotExisting) {
 
 TEST_F(DbTest, ExistWithTime) {
 
-const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
- std::chrono::time_point<std::chrono::system_clock> expires{std::chrono::seconds{100} + now};
-       
+  const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::system_clock::now().time_since_epoch());
+  std::chrono::time_point<std::chrono::system_clock> expires{
+      std::chrono::seconds{100} + now};
+
   db.set("key", "value", expires);
   EXPECT_EQ(ValueType{"value"}, db.get("key").value());
 }
 
 TEST_F(DbTest, TimeExpires) {
-const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
- std::chrono::time_point<std::chrono::system_clock> expires{now - std::chrono::milliseconds{100}};
+  const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::system_clock::now().time_since_epoch());
+  std::chrono::time_point<std::chrono::system_clock> expires{
+      now - std::chrono::milliseconds{100}};
   db.set("key", "value", expires);
   EXPECT_FALSE(db.get("key").has_value());
 }

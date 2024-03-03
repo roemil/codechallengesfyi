@@ -13,7 +13,7 @@ struct ValueType {
   ValueType() = default;
   explicit ValueType(const std::string_view value)
       : value_(std::string{value.data(), value.length()}) {}
-  ValueType(const std::string_view value, const TimePoint& expire)
+  ValueType(const std::string_view value, const TimePoint &expire)
       : value_(std::string{value.data(), value.length()}), expire_(expire) {}
   std::string value_{};
   std::optional<TimePoint> expire_{};
@@ -28,7 +28,6 @@ struct ValueType {
 
 class Db {
 public:
-
   Db() { std::cout << "[INFO]: New Db is created.\n"; }
   void set(const KeyT key, const std::string_view &value) {
     std::cout << "[INFO]: Storing key: " << key << " val: " << value << "\n";
@@ -36,11 +35,15 @@ public:
     const auto val_ = ValueType{value};
     map_[key_] = val_;
   }
-  void set(const KeyT key, const std::string_view &value, const TimePoint& expire) {
-  using namespace std::chrono;
-   const auto now =std::chrono::system_clock::now();
+  void set(const KeyT key, const std::string_view &value,
+           const TimePoint &expire) {
+    using namespace std::chrono;
+    const auto now = std::chrono::system_clock::now();
     std::cout << "[INFO]: Storing key: " << key << " val: " << value
-              << " Expires in: " << std::chrono::duration_cast<std::chrono::seconds>(expire.time_since_epoch() - now.time_since_epoch()) << "\n";
+              << " Expires in: "
+              << std::chrono::duration_cast<std::chrono::seconds>(
+                     expire.time_since_epoch() - now.time_since_epoch())
+              << "\n";
     const auto key_ = std::string{key.data(), key.length()};
     const auto val_ = ValueType{value, expire};
     map_[key_] = val_;
@@ -53,12 +56,13 @@ public:
       const auto &value_ = map_[key_];
       if (value_.expire_.has_value()) {
 
-        const auto now =std::chrono::system_clock::now();
+        const auto now = std::chrono::system_clock::now();
         const auto expires = value_.expire_.value();
-        // std::cout << "[INFO]: Key expires in: " << std::to_string(expires - now)
+        // std::cout << "[INFO]: Key expires in: " << std::to_string(expires -
+        // now)
         //           << "\n";
         using Ms = std::chrono::milliseconds;
-        const auto timeElapsed = std::chrono::duration_cast<Ms> ( expires - now);
+        const auto timeElapsed = std::chrono::duration_cast<Ms>(expires - now);
         if (timeElapsed < Ms{0}) {
           std::cout << "[INFO]: Key expired\n";
           return std::nullopt;

@@ -1,11 +1,11 @@
 #pragma once
 
 #include "Database.h"
+#include <chrono>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <variant>
-#include <chrono>
 
 template <typename Cmd> struct CommandBase {
   constexpr bool isValid() { return isValid_; }
@@ -16,7 +16,9 @@ template <typename Cmd> struct CommandBase {
 
 struct CommandUnknown : CommandBase<CommandUnknown> {};
 struct CommandInvalid : CommandBase<CommandInvalid> {};
-struct CommandPing : CommandBase<CommandPing> {};
+struct CommandPing : CommandBase<CommandPing> {
+  std::string_view value_{};
+};
 struct CommandHello : CommandBase<CommandHello> {
   constexpr CommandHello() = default;
   std::string_view version_{};

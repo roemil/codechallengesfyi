@@ -9,9 +9,10 @@
 
 void ParsePayload::operator()(CommandUnknown &) { return; }
 void ParsePayload::operator()(CommandInvalid &) { return; }
-void ParsePayload::operator()(CommandPing &) {
-  // TODO: Should echo the incoming messsage
-  return;
+void ParsePayload::operator()(CommandPing & cmd) {
+  if (resp_.string_.has_value()) {
+    cmd.value_ = resp_.string_.value();
+  }
 }
 void ParsePayload::operator()(CommandHello &cmd) {
   assert(resp_.string_.has_value()); // Version is passed as string in client
@@ -45,12 +46,18 @@ void ParsePayload::operator()(CommandSet &cmd) {
       const auto [_, ec] = std::from_chars(resp_.string_.value().begin(),
                                            resp_.string_.value().end(), time);
       assert(ec == std::errc()); // TODO: Error handling :)
-      const auto now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch());
-        std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds> timeS{std::chrono::seconds{time} + now};
-        cmd.expire = timeS;
+      const auto now = std::chrono::duration_cast<std::chrono::seconds>(
+          std::chrono::system_clock::now().time_since_epoch());
+      std::chrono::time_point<std::chrono::system_clock,
+                              std::chrono::milliseconds>
+          timeS{std::chrono::seconds{time} + now};
+      cmd.expire = timeS;
       if (cmd.resolution_ == ExpireTimeResolution::Milliseconds) {
-        const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
-        std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds> timeMs{std::chrono::milliseconds{time} + now};
+        const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch());
+        std::chrono::time_point<std::chrono::system_clock,
+                                std::chrono::milliseconds>
+            timeMs{std::chrono::milliseconds{time} + now};
         cmd.expire = timeMs;
       }
       cmd.state_ = CommandState::Done;
