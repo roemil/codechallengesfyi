@@ -3,6 +3,7 @@
 #include "Commands.h"
 #include "Database.h"
 #include "RespEncoder.h"
+#include <string>
 
 void CommandHandler::operator()(const CommandUnknown&)
 {
@@ -67,5 +68,25 @@ void CommandHandler::operator()(const CommandExists& cmd)
         encoder_->appendInt("1");
     } else {
         encoder_->appendInt("0");
+    }
+}
+
+void CommandHandler::operator()(const CommandIncr& cmd)
+{
+    auto value_ = db_->get(cmd.key_);
+    if (value_.has_value()) {
+        try {
+            int intVal = std::stoi(value_->value_);
+            intVal+=1;
+            value_->value_ = std::to_string(intVal);
+            db_->set(cmd.key_, value_.value());
+
+            encoder_->appendBulkstring("OK");
+        } catch (...) {
+            encoder_->appendError("Invalid value - cannot increment it");
+        }
+
+    } else {
+        encoder_->appendError("Key does not exist");
     }
 }

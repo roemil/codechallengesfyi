@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Commands.h"
 #include <expected>
 
 struct CommandUnknown;
@@ -29,4 +30,5 @@ struct ParsePayload {
   std::expected<ParseSuccessful, CommandInvalid> operator()(CommandSet &);
   std::expected<ParseSuccessful, CommandInvalid> operator()(CommandGet &);
   std::expected<ParseSuccessful, CommandInvalid> operator()(CommandExists &);
+  std::expected<ParseSuccessful, CommandInvalid> operator()(CommandIncr &);
 };

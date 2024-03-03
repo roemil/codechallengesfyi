@@ -178,6 +178,8 @@ CommandVariant RespDecoder::parseRawArrayCommands(
     cmd = CommandPing{};
   } else if (rawKind == "EXISTS") {
     cmd = CommandExists{};
+  } else if (rawKind == "INCR") {
+    cmd = CommandIncr{};
   } else {
     cmd = CommandUnknown{};
   }

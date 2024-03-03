@@ -47,6 +47,11 @@ struct CommandExists : CommandBase<CommandExists> {
   std::string_view key_;
 };
 
+struct CommandIncr : CommandBase<CommandIncr>
+{
+  std::string_view key_;
+};
+
 using CommandVariant =
     std::variant<CommandUnknown, CommandInvalid, CommandPing, CommandHello,
-                 CommandSet, CommandGet, CommandExists>;
+                 CommandSet, CommandGet, CommandExists, CommandIncr>;

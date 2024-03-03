@@ -114,3 +114,11 @@ TEST_F(RespCommandConverterTest, SETwithPx) {
   // and we should mock system time.
   EXPECT_GE(time, std::get<CommandSet>(commands[0]).expire);
 }
+
+TEST_F(RespCommandConverterTest, INCR) {
+  RedisRespRes rawCommand{
+      .array_ = std::vector<RedisRespRes>{RedisRespRes{.string_{"INCR"}},
+                                          RedisRespRes{.string_{"key"}}}};
+  const auto commands = rh.convertToCommands(rawCommand);
+  EXPECT_EQ("key", std::get<CommandIncr>(commands[0]).key_);
+}

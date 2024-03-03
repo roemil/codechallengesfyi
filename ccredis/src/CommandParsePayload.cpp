@@ -117,3 +117,18 @@ ParsePayload::operator()(CommandExists &cmd) {
   }
   return ParseSuccessful{};
 }
+
+std::expected<ParseSuccessful, CommandInvalid>
+ParsePayload::operator()(CommandIncr &cmd) {
+  if (resp_.string_.has_value()) {
+    cmd.key_ = resp_.string_.value();
+  } else if (resp_.integer_.has_value()) {
+    cmd.key_ = std::to_string(resp_.integer_.value());
+  }
+  if (cmd.key_.empty()) {
+    CommandInvalid invalidCmd{};
+    invalidCmd.errorString = "Missing key";
+    return std::unexpected{invalidCmd};
+  }
+  return ParseSuccessful{};
+}

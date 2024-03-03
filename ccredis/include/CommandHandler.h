@@ -12,6 +12,7 @@ struct CommandHello;
 struct CommandSet;
 struct CommandGet;
 struct CommandExists;
+struct CommandIncr;
 
 class CommandHandler {
 public:
@@ -29,6 +30,7 @@ public:
     void operator()(const CommandSet&);
     void operator()(const CommandGet&);
     void operator()(const CommandExists&);
+    void operator()(const CommandIncr&);
 
 private:
     RespEncoder* encoder_;

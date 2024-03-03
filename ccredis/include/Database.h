@@ -35,6 +35,10 @@ public:
     const auto val_ = ValueType{value};
     map_[key_] = val_;
   }
+    void set(const KeyT key, const ValueType &value) {
+    const auto key_ = std::string{key.data(), key.length()};
+    map_[key_] = value;
+  }
   void set(const KeyT key, const std::string_view &value,
            const TimePoint &expire) {
     using namespace std::chrono;
