@@ -11,9 +11,8 @@ void CommandHandler::operator()(const CommandUnknown &) {
 void CommandHandler::operator()(const CommandInvalid &) {
   encoder_->appendError("Invalid Command");
 }
-void CommandHandler::operator()(const CommandPing & cmd) {
-  if(cmd.value_.empty())
-  {
+void CommandHandler::operator()(const CommandPing &cmd) {
+  if (cmd.value_.empty()) {
     encoder_->appendBulkstring("PONG");
     return;
   }

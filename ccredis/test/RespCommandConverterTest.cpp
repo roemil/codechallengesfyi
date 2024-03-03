@@ -27,9 +27,9 @@ TEST_F(RespCommandConverterTest, Ping) {
 }
 
 TEST_F(RespCommandConverterTest, PingWithMessage) {
- RedisRespRes rawCommand{
-      .array_ = std::vector<RedisRespRes>{RedisRespRes{.string_{"PING"}},
-                                          RedisRespRes{.string_{"Hello world"}}}};
+  RedisRespRes rawCommand{.array_ = std::vector<RedisRespRes>{
+                              RedisRespRes{.string_{"PING"}},
+                              RedisRespRes{.string_{"Hello world"}}}};
   const auto commands = rh.convertToCommands(rawCommand);
   EXPECT_EQ("Hello world", std::get<CommandPing>(commands[0]).value_);
 }

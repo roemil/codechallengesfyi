@@ -9,7 +9,7 @@
 
 void ParsePayload::operator()(CommandUnknown &) { return; }
 void ParsePayload::operator()(CommandInvalid &) { return; }
-void ParsePayload::operator()(CommandPing & cmd) {
+void ParsePayload::operator()(CommandPing &cmd) {
   if (resp_.string_.has_value()) {
     cmd.value_ = resp_.string_.value();
   }
