@@ -8,7 +8,11 @@ void CommandHandler::operator()(const CommandUnknown &) {
   encoder_->appendError(
       "Unknown command. Prefix did not match any expected prefixes");
 }
-void CommandHandler::operator()(const CommandInvalid &) {
+void CommandHandler::operator()(const CommandInvalid &cmd) {
+  if (!cmd.errorString.empty()) {
+    encoder_->beginArray(2);
+    encoder_->appendError(cmd.errorString);
+  }
   encoder_->appendError("Invalid Command");
 }
 void CommandHandler::operator()(const CommandPing &cmd) {

@@ -69,6 +69,14 @@ TEST_F(RespCommandConverterTest, EXISTS) {
   EXPECT_EQ("key", std::get<CommandExists>(commands[0]).key_);
 }
 
+TEST_F(RespCommandConverterTest, EXISTSInvalid) {
+  RedisRespRes rawCommand{
+      .array_ = std::vector<RedisRespRes>{RedisRespRes{.string_{"EXISTS"}},
+                                          RedisRespRes{.string_{""}}}};
+  const auto commands = rh.convertToCommands(rawCommand);
+  EXPECT_EQ("Missing key", std::get<CommandInvalid>(commands[0]).errorString);
+}
+
 TEST_F(RespCommandConverterTest, SETwithEx) {
   RedisRespRes rawCommand{
       .array_ = std::vector<RedisRespRes>{

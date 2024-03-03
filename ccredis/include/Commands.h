@@ -7,6 +7,8 @@
 #include <string_view>
 #include <variant>
 
+struct ParseSuccessful {};
+
 template <typename Cmd> struct CommandBase {
   constexpr bool isValid() { return isValid_; }
 

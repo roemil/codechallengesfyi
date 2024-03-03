@@ -5,6 +5,7 @@
 
 #include <cassert>
 #include <charconv>
+#include <expected>
 #include <iostream>
 #include <map>
 #include <ranges>
@@ -183,8 +184,21 @@ CommandVariant RespDecoder::parseRawArrayCommands(
 
   // TODO: Refactor so that ParsePayload takes the entire command array
   for (const auto &rawCommand : commandArray | std::views::drop(1)) {
-    std::visit(ParsePayload{rawCommand}, cmd);
+    const std::expected<ParseSuccessful, CommandInvalid> result =
+        std::visit(ParsePayload{rawCommand}, cmd);
+    if (!result.has_value()) {
+      return result.error();
+    }
   }
+
+  /*
+  Error handling: Easiest is to throw exceptions in case a command is not
+  properly constructed... But how fun is that. Not sure what the alternative
+  would be as long as I am using std::visit. If parsePayload takes the commit
+  variant and the entire command array, maybe we could use std::expected as
+  return type?
+  */
+
   return cmd;
 }
 

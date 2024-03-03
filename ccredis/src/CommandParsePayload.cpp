@@ -5,20 +5,37 @@
 #include <cassert>
 #include <charconv>
 #include <chrono>
+#include <expected>
 #include <string>
 
-void ParsePayload::operator()(CommandUnknown &) { return; }
-void ParsePayload::operator()(CommandInvalid &) { return; }
-void ParsePayload::operator()(CommandPing &cmd) {
+std::expected<ParseSuccessful, CommandInvalid>
+ParsePayload::operator()(CommandUnknown &) {
+  return ParseSuccessful{};
+}
+std::expected<ParseSuccessful, CommandInvalid>
+ParsePayload::operator()(CommandInvalid &) {
+  return ParseSuccessful{};
+}
+std::expected<ParseSuccessful, CommandInvalid>
+ParsePayload::operator()(CommandPing &cmd) {
   if (resp_.string_.has_value()) {
     cmd.value_ = resp_.string_.value();
   }
+  return ParseSuccessful{};
 }
-void ParsePayload::operator()(CommandHello &cmd) {
+std::expected<ParseSuccessful, CommandInvalid>
+ParsePayload::operator()(CommandHello &cmd) {
   assert(resp_.string_.has_value()); // Version is passed as string in client
   cmd.version_ = resp_.string_.value();
+  if (cmd.version_.empty()) {
+    CommandInvalid invalidCmd{};
+    invalidCmd.errorString = "Missing version";
+    return std::unexpected{invalidCmd};
+  }
+  return ParseSuccessful{};
 }
-void ParsePayload::operator()(CommandSet &cmd) {
+std::expected<ParseSuccessful, CommandInvalid>
+ParsePayload::operator()(CommandSet &cmd) {
   if (cmd.key_.empty()) {
     if (resp_.string_.has_value()) {
       cmd.key_ = resp_.string_.value();
@@ -45,7 +62,11 @@ void ParsePayload::operator()(CommandSet &cmd) {
       int time{};
       const auto [_, ec] = std::from_chars(resp_.string_.value().begin(),
                                            resp_.string_.value().end(), time);
-      assert(ec == std::errc()); // TODO: Error handling :)
+      if (ec != std::errc()) {
+        CommandInvalid invalidCmd{};
+        invalidCmd.errorString = "Invalid expiration time";
+        return std::unexpected{invalidCmd};
+      }
       const auto now = std::chrono::duration_cast<std::chrono::seconds>(
           std::chrono::system_clock::now().time_since_epoch());
       std::chrono::time_point<std::chrono::system_clock,
@@ -60,22 +81,39 @@ void ParsePayload::operator()(CommandSet &cmd) {
             timeMs{std::chrono::milliseconds{time} + now};
         cmd.expire = timeMs;
       }
-      cmd.state_ = CommandState::Done;
     }
   }
+  cmd.state_ = CommandState::Done;
+  return ParseSuccessful{};
 }
-void ParsePayload::operator()(CommandGet &cmd) {
+std::expected<ParseSuccessful, CommandInvalid>
+ParsePayload::operator()(CommandGet &cmd) {
   if (resp_.string_.has_value()) {
     cmd.key_ = resp_.string_.value();
   } else if (resp_.integer_.has_value()) {
     cmd.key_ = std::to_string(resp_.integer_.value());
   }
+
+  if (cmd.key_.empty()) {
+    CommandInvalid invalidCmd{};
+    invalidCmd.errorString = "Missing key";
+    return std::unexpected{invalidCmd};
+  }
+
+  return ParseSuccessful{};
 }
 
-void ParsePayload::operator()(CommandExists &cmd) {
+std::expected<ParseSuccessful, CommandInvalid>
+ParsePayload::operator()(CommandExists &cmd) {
   if (resp_.string_.has_value()) {
     cmd.key_ = resp_.string_.value();
   } else if (resp_.integer_.has_value()) {
     cmd.key_ = std::to_string(resp_.integer_.value());
   }
+  if (cmd.key_.empty()) {
+    CommandInvalid invalidCmd{};
+    invalidCmd.errorString = "Missing key";
+    return std::unexpected{invalidCmd};
+  }
+  return ParseSuccessful{};
 }
