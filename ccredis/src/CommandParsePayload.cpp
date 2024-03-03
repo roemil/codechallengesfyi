@@ -2,8 +2,8 @@
 #include "Commands.h"
 #include "Resp.h"
 
-#include <string>
 #include <cassert>
+#include <string>
 
 void ParsePayload::operator()(CommandUnknown&)
 {

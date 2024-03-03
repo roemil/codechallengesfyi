@@ -7,12 +7,12 @@
 #include <charconv>
 #include <iostream>
 #include <map>
+#include <ranges>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <variant>
 #include <vector>
-#include <ranges>
 
 std::pair<size_t, RedisRespRes> RespDecoder::decodeSimpleString(const std::string_view str)
 {
@@ -21,7 +21,7 @@ std::pair<size_t, RedisRespRes> RespDecoder::decodeSimpleString(const std::strin
     if (crlfPos == std::string::npos) {
         throw std::invalid_argument { "Missing CRLF in Simple String" };
     }
-    return { crlfPos+2, RedisRespRes { .string_ = str.substr(1, crlfPos - 1) } };
+    return { crlfPos + 2, RedisRespRes { .string_ = str.substr(1, crlfPos - 1) } };
 }
 
 std::pair<size_t, RedisRespRes> RespDecoder::decodeBulkString(const std::string_view str)
@@ -32,7 +32,7 @@ std::pair<size_t, RedisRespRes> RespDecoder::decodeBulkString(const std::string_
     }
 
     if (str.substr(1, lengthDelim - 1) == "-1") {
-        return { lengthDelim+2, RedisRespRes { .string_ = "null" } };
+        return { lengthDelim + 2, RedisRespRes { .string_ = "null" } };
     }
 
     int length {};
@@ -49,11 +49,10 @@ std::pair<size_t, RedisRespRes> RespDecoder::decodeBulkString(const std::string_
         throw std::invalid_argument { "Invalid format. End delimiter same as length delimiter" };
     }
     const auto substr = str.substr(lengthDelim + 2, length);
-    if(substr.find("\r\n") != std::string_view::npos)
-    {
-        throw std::invalid_argument { "Still CRLF..." + std::string{substr.data()} };
+    if (substr.find("\r\n") != std::string_view::npos) {
+        throw std::invalid_argument { "Still CRLF..." + std::string { substr.data() } };
     }
-    return { endDelim+2, RedisRespRes { .string_ = substr} };
+    return { endDelim + 2, RedisRespRes { .string_ = substr } };
 }
 
 std::pair<size_t, RedisRespRes> RespDecoder::decodeError(const std::string_view str)
@@ -63,7 +62,7 @@ std::pair<size_t, RedisRespRes> RespDecoder::decodeError(const std::string_view 
         throw std::invalid_argument { "Missing CRLF in Simple String" };
     }
 
-    return { crlfPos+2, RedisRespRes { .error_ = str.substr(1, crlfPos - 1) } };
+    return { crlfPos + 2, RedisRespRes { .error_ = str.substr(1, crlfPos - 1) } };
 }
 
 std::pair<size_t, RedisRespRes> RespDecoder::decodeInt(const std::string_view str)
@@ -74,7 +73,7 @@ std::pair<size_t, RedisRespRes> RespDecoder::decodeInt(const std::string_view st
     }
     std::string_view decodedInt = str.substr(1, crlfPos - 1);
     // TODO: Verify value is integer with regex
-    return { crlfPos+2, RedisRespRes { .integer_ = std::stoi(decodedInt.data()) } };
+    return { crlfPos + 2, RedisRespRes { .integer_ = std::stoi(decodedInt.data()) } };
 }
 
 std::pair<size_t, RedisRespRes> RespDecoder::decodeArray(const std::string_view str)
@@ -120,13 +119,13 @@ std::pair<size_t, RedisRespRes> RespDecoder::decodeMap(const std::string_view st
         const auto decodedVal = decode(str.substr(startPos));
         result[key] = decodedVal.second;
     }
-    return { startPos+2, RedisRespRes { .map_ = result } };
+    return { startPos + 2, RedisRespRes { .map_ = result } };
 }
 
 std::pair<size_t, RedisRespRes> RespDecoder::decode(const std::string_view str)
 {
     // TODO: Implement sets
-    //std::cout << __PRETTY_FUNCTION__ << " str= " << str;
+    // std::cout << __PRETTY_FUNCTION__ << " str= " << str;
     const auto prefix = static_cast<Prefix>(str[0]);
     switch (prefix) {
     case Prefix::SIMPLE_STRING:
@@ -170,14 +169,12 @@ CommandVariant RespDecoder::parseRawArrayCommands(const std::vector<RedisRespRes
     } else if (rawKind == "PING") {
         cmd = CommandPing {};
     } else if (rawKind == "EXISTS") {
-        cmd = CommandExists{};
-    }
-    else {
+        cmd = CommandExists {};
+    } else {
         cmd = CommandInvalid {};
     }
 
-    for(const auto& rawCommand : commandArray | std::views::drop(1))
-    {
+    for (const auto& rawCommand : commandArray | std::views::drop(1)) {
         std::visit(ParsePayload { rawCommand }, cmd);
     }
     return cmd;

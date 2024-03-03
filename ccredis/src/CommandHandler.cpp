@@ -1,8 +1,8 @@
 #include "CommandHandler.h"
 
 #include "Commands.h"
-#include "RespEncoder.h"
 #include "Database.h"
+#include "RespEncoder.h"
 
 void CommandHandler::operator()(const CommandUnknown&)
 {
@@ -39,20 +39,18 @@ void CommandHandler::operator()(const CommandSet& cmd)
 void CommandHandler::operator()(const CommandGet& cmd)
 {
     const auto& value_ = db_->get(cmd.key_);
-    if(value_.has_value()){
+    if (value_.has_value()) {
         encoder_->appendBulkstring(value_.value());
-    }
-    else {
+    } else {
         encoder_->appendError("Key not exist");
     }
 }
 void CommandHandler::operator()(const CommandExists& cmd)
 {
     const auto& value_ = db_->get(cmd.key_);
-    if(value_.has_value()){
+    if (value_.has_value()) {
         encoder_->appendInt("1");
-    }
-    else {
+    } else {
         encoder_->appendInt("0");
     }
 }

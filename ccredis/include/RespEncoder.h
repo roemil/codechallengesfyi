@@ -1,16 +1,15 @@
 #pragma once
 
+#include <memory>
 #include <string_view>
 #include <vector>
-#include <memory>
-
 
 class Db;
 
 class RespEncoder {
 public:
     RespEncoder() = default;
-    //RespEncoder(const std::shared_ptr<Db>& db) : db_(db) {}
+    // RespEncoder(const std::shared_ptr<Db>& db) : db_(db) {}
     void appendSimpleString(const std::string_view str);
     void appendError(const std::string_view str);
     void appendInt(const std::string_view n);
@@ -22,8 +21,7 @@ public:
     void appendKV(const std::string_view key, const int val);
 
     const std::vector<char>& getBuffer() const;
-    void clearBuffer() {buffer.clear();}
-
+    void clearBuffer() { buffer.clear(); }
 
 private:
     void appendCRLF();

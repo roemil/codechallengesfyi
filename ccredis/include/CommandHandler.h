@@ -13,13 +13,16 @@ struct CommandSet;
 struct CommandGet;
 struct CommandExists;
 
-class CommandHandler
-{
-    public:
+class CommandHandler {
+public:
     CommandHandler() = default;
-        CommandHandler(RespEncoder* enc, const std::shared_ptr<Db>& db) : encoder_(enc), db_(db) {}
+    CommandHandler(RespEncoder* enc, const std::shared_ptr<Db>& db)
+        : encoder_(enc)
+        , db_(db)
+    {
+    }
 
-            void operator()(const CommandUnknown&);
+    void operator()(const CommandUnknown&);
     void operator()(const CommandInvalid&);
     void operator()(const CommandPing&);
     void operator()(const CommandHello&);
@@ -27,7 +30,7 @@ class CommandHandler
     void operator()(const CommandGet&);
     void operator()(const CommandExists&);
 
-    private:
-        RespEncoder* encoder_;
-        std::shared_ptr<Db> db_;
+private:
+    RespEncoder* encoder_;
+    std::shared_ptr<Db> db_;
 };

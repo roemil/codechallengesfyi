@@ -1,9 +1,9 @@
 #include "Server.h"
 
+#include "Database.h"
 #include "Resp.h"
 #include "RespDecoder.h"
 #include "RespEncoder.h"
-#include "Database.h"
 
 #include <algorithm>
 #include <array>
@@ -16,6 +16,7 @@
 #include <iostream>
 #include <memory>
 #include <netdb.h>
+#include <poll.h>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -24,8 +25,6 @@
 #include <sys/types.h>
 #include <variant>
 #include <vector>
-#include <memory>
-#include <poll.h>
 
 #define PORT "6379"
 
@@ -102,13 +101,13 @@ void RedisServer::handleInput(int clientFd, const std::string_view str)
         sendData(clientFd, respEncoder_.getBuffer());
         respEncoder_.clearBuffer();
     } catch (const std::invalid_argument& e) {
-        logInfo("Invalid argument: " + std::string{e.what()});
+        logInfo("Invalid argument: " + std::string { e.what() });
     }
 }
 
 ClientState RedisServer::handleClient(const int clientFd)
 {
-    std::array<char, 1024> buf{};
+    std::array<char, 1024> buf {};
     while (true) {
         int n = recv(clientFd, buf.data(), 1024, 0);
         if (n == 0) {
@@ -116,11 +115,10 @@ ClientState RedisServer::handleClient(const int clientFd)
             logInfo("Client disconnected");
             return ClientState::Disconnected;
         }
-        if (n < 0)
-        {
+        if (n < 0) {
             logInfo("Received " + std::to_string(n) + " . There is an error");
             // Remove client.
-            return ClientState::Disconnected;    
+            return ClientState::Disconnected;
         }
         logInfo("Received " + std::to_string(n) + " amount of bytes");
         logInfo("Received msg: " + std::string { buf.data(), static_cast<size_t>(n) });
@@ -132,7 +130,7 @@ ClientState RedisServer::handleClient(const int clientFd)
 int acceptNewClient(int listener)
 {
     struct sockaddr_storage their_addr;
-                    socklen_t addr_size = sizeof their_addr;
+    socklen_t addr_size = sizeof their_addr;
     int clientFd = accept(listener, (struct sockaddr*)&their_addr, &addr_size);
     return clientFd;
 }
@@ -157,43 +155,40 @@ void RedisServer::start(const std::string_view port)
     }
 
     fds_.reserve(maxClients);
-    fds_.emplace_back(pollfd{.fd = listener, .events = POLL_IN, .revents = 0});
+    fds_.emplace_back(pollfd { .fd = listener, .events = POLL_IN, .revents = 0 });
 
     while (true) {
         logInfo("Waiting for poll...");
         int pollCount = poll(fds_.data(), fds_.size(), -1);
         logInfo("Polled: " + std::to_string(pollCount));
-        if (pollCount == -1){
+        if (pollCount == -1) {
             perror("poll");
             exit(1);
         }
 
-        for(const auto pollFd : fds_){
-            if(pollFd.revents & POLL_IN){
-                if(pollFd.fd == listener){
+        for (const auto pollFd : fds_) {
+            if (pollFd.revents & POLL_IN) {
+                if (pollFd.fd == listener) {
                     logInfo("Client connected. Fd= " + std::to_string(pollFd.fd));
                     int clientFd = acceptNewClient(listener);
-                    fds_.emplace_back(pollfd{.fd = clientFd, .events = POLL_IN, .revents = 0});
-                }
-                else {
+                    fds_.emplace_back(pollfd { .fd = clientFd, .events = POLL_IN, .revents = 0 });
+                } else {
                     const auto state = handleClient(pollFd.fd);
-                    if (state == ClientState::Disconnected){
+                    if (state == ClientState::Disconnected) {
                         auto fdToRemove = pollFd.fd;
-                        fds_.erase(std::remove_if(fds_.begin(), fds_.end(), [fdToRemove](pollfd fdElem){
+                        fds_.erase(std::remove_if(fds_.begin(), fds_.end(), [fdToRemove](pollfd fdElem) {
                             return fdElem.fd == fdToRemove;
-                        }), fds_.end());
+                        }),
+                            fds_.end());
                     }
                 }
             }
         }
-
     }
 }
 
-
 int main()
 {
-    RedisServer server{std::make_shared<Db>()};
+    RedisServer server { std::make_shared<Db>() };
     server.start(PORT);
-    
 }

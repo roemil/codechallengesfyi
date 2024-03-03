@@ -10,16 +10,15 @@ protected:
 TEST_F(DbTest, Basic)
 {
     db.set("key", "value");
-    EXPECT_EQ(ValueType{"value"}, db.get("key").value());
+    EXPECT_EQ(ValueType { "value" }, db.get("key").value());
 }
-
 
 TEST_F(DbTest, NotExisting)
 {
     db.set("key", "value");
-    EXPECT_EQ(ValueType{"value"}, db.get("key").value());
+    EXPECT_EQ(ValueType { "value" }, db.get("key").value());
 
     EXPECT_FALSE(db.get("otherkey").has_value());
 
-    EXPECT_EQ(ValueType{"value"}, db.get("key").value());
+    EXPECT_EQ(ValueType { "value" }, db.get("key").value());
 }
