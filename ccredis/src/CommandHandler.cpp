@@ -77,7 +77,7 @@ void CommandHandler::operator()(const CommandIncr& cmd)
     if (value_.has_value()) {
         try {
             int intVal = std::stoi(value_->value_);
-            intVal+=1;
+            intVal += 1;
             value_->value_ = std::to_string(intVal);
             db_->set(cmd.key_, value_.value());
 
