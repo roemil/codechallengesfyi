@@ -36,6 +36,7 @@ void CommandHandler::operator()(const CommandHello &cmd) {
   encoder_->appendKV("version", "0.0.1");
   encoder_->appendKV("proto", 3);
 }
+
 void CommandHandler::operator()(const CommandSet &cmd) {
   if (cmd.expire.has_value()) {
     db_->set(cmd.key_, cmd.value_, cmd.expire.value());
