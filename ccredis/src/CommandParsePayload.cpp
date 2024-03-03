@@ -3,7 +3,9 @@
 #include "Resp.h"
 
 #include <cassert>
+#include <charconv>
 #include <string>
+#include <chrono>
 
 void ParsePayload::operator()(CommandUnknown&)
 {
@@ -15,6 +17,7 @@ void ParsePayload::operator()(CommandInvalid&)
 }
 void ParsePayload::operator()(CommandPing&)
 {
+    // TODO: Should echo the incoming messsage
     return;
 }
 void ParsePayload::operator()(CommandHello& cmd)
@@ -30,11 +33,39 @@ void ParsePayload::operator()(CommandSet& cmd)
         } else if (resp_.integer_.has_value()) {
             cmd.key_ = std::to_string(resp_.integer_.value());
         }
-    } else {
+    } else if (cmd.value_.empty()){
         if (resp_.string_.has_value()) {
             cmd.value_ = resp_.string_.value();
         } else if (resp_.integer_.has_value()) {
             cmd.value_ = std::to_string(resp_.integer_.value());
+        }
+    } else {
+        // Optional data, eg EX, PX
+        if(resp_.string_.has_value() && resp_.string_.value() == "EX")
+        {
+            cmd.state_ = CommandState::WaitingForValue;
+            cmd.resolution_ = ExpireTimeResolution::Seconds;
+        }
+        else if(resp_.string_.has_value() && resp_.string_.value() == "PX")
+        {
+            cmd.state_ = CommandState::WaitingForValue;
+            cmd.resolution_ = ExpireTimeResolution::Milliseconds;
+        }
+        else if(resp_.string_.has_value() && cmd.state_ == CommandState::WaitingForValue)
+        {
+            const auto now = std::chrono::duration_cast<std::chrono::seconds>(
+                   std::chrono::system_clock::now().time_since_epoch()).count();
+
+
+            int time{};
+            const auto [_, ec] = std::from_chars(resp_.string_.value().begin(), resp_.string_.value().end(), time);
+            if(cmd.resolution_ == ExpireTimeResolution::Milliseconds)
+            {
+                time = time / 1000;
+            }
+            cmd.expire = now + time;
+            assert(ec == std::errc()); // TODO: Error handling :)
+            cmd.state_ = CommandState::Done;
         }
     }
 }

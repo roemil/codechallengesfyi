@@ -22,3 +22,19 @@ TEST_F(DbTest, NotExisting)
 
     EXPECT_EQ(ValueType { "value" }, db.get("key").value());
 }
+
+TEST_F(DbTest, ExistWithTime)
+{
+    const auto now = std::chrono::duration_cast<std::chrono::seconds>(
+                   std::chrono::system_clock::now().time_since_epoch()).count();
+    db.set("key", "value", now+100);
+    EXPECT_EQ(ValueType { "value" }, db.get("key").value());
+}
+
+TEST_F(DbTest, TimeExpires)
+{
+    const auto now = std::chrono::duration_cast<std::chrono::seconds>(
+                   std::chrono::system_clock::now().time_since_epoch()).count();
+    db.set("key", "value", now-100);
+    EXPECT_FALSE(db.get("key").has_value());
+}

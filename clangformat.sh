@@ -1,3 +1,3 @@
-#!/bin/bash
+#!/ bin / bash
 
-clang-format -i -style=WebKit src/*.cpp include/*.h test/*cpp
+clang - format - i - style = WebKit src/*.cpp include/*.h test/*cpp

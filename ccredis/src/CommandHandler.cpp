@@ -33,7 +33,14 @@ void CommandHandler::operator()(const CommandHello& cmd)
 }
 void CommandHandler::operator()(const CommandSet& cmd)
 {
-    db_->set(cmd.key_, cmd.value_);
+    if(cmd.expire.has_value())
+    {
+        db_->set(cmd.key_, cmd.value_, cmd.expire.value());
+    }
+    else
+    {
+        db_->set(cmd.key_, cmd.value_);
+    }
     encoder_->appendSimpleString("OK");
 }
 void CommandHandler::operator()(const CommandGet& cmd)
@@ -42,7 +49,7 @@ void CommandHandler::operator()(const CommandGet& cmd)
     if (value_.has_value()) {
         encoder_->appendBulkstring(value_.value());
     } else {
-        encoder_->appendError("Key not exist");
+        encoder_->appendError("Key does not exist");
     }
 }
 void CommandHandler::operator()(const CommandExists& cmd)

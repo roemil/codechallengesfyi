@@ -55,3 +55,15 @@ TEST_F(RespCommandConverterTest, EXISTS)
     const auto commands = rh.convertToCommands(rawCommand);
     EXPECT_EQ("key", std::get<CommandExists>(commands[0]).key_);
 }
+
+TEST_F(RespCommandConverterTest, SETwithEx)
+{
+    RedisRespRes rawCommand { .array_ = std::vector<RedisRespRes> { RedisRespRes { .string_ { "SET" } }, RedisRespRes { .string_ { "key" } }, RedisRespRes { .string_ { "value" } }, RedisRespRes { .string_ { "EX" } }, RedisRespRes { .string_ { "100" } }} };
+    const auto commands = rh.convertToCommands(rawCommand);
+    EXPECT_EQ("key", std::get<CommandSet>(commands[0]).key_);
+    EXPECT_EQ("value", std::get<CommandSet>(commands[0]).value_);
+    const auto now = std::chrono::duration_cast<std::chrono::seconds>(
+                   std::chrono::system_clock::now().time_since_epoch()).count();
+    // MAake sure we are at least not 1 seconds off. This is probably not stable and we should mock system time.
+    EXPECT_GE(100+now+1, std::get<CommandSet>(commands[0]).expire);
+}

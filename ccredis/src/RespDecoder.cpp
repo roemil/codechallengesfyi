@@ -171,9 +171,10 @@ CommandVariant RespDecoder::parseRawArrayCommands(const std::vector<RedisRespRes
     } else if (rawKind == "EXISTS") {
         cmd = CommandExists {};
     } else {
-        cmd = CommandInvalid {};
+        cmd = CommandUnknown {};
     }
 
+    // TODO: Refactor so that ParsePayload takes the entire command array
     for (const auto& rawCommand : commandArray | std::views::drop(1)) {
         std::visit(ParsePayload { rawCommand }, cmd);
     }
