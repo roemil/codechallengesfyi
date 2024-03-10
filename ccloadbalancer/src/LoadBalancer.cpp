@@ -20,7 +20,7 @@
 
 #include "TcpSocket.h"
 
-#define PORT "80"
+#define PORT "8080"
 
 using servInfo = std::unique_ptr<addrinfo, decltype(&freeaddrinfo)>;
 
@@ -147,7 +147,7 @@ void LoadBalancer::start(const std::string_view port)
                 if (pollFd.fd == listener) {
                     logInfo("Client connected. Fd= " + std::to_string(pollFd.fd));
                     int clientFd = acceptNewClient(listener);
-                    fds_.emplace_back(pollfd { .fd = clientFd, .events = POLL_IN|POLL_OUT, .revents = 0 });
+                    fds_.emplace_back(pollfd { .fd = clientFd, .events = POLL_IN | POLL_OUT, .revents = 0 });
                 } else {
                     const auto state = handleClient(pollFd.fd);
                     if (state == ClientState::Disconnected) {
@@ -158,9 +158,7 @@ void LoadBalancer::start(const std::string_view port)
                             fds_.end());
                     }
                 }
-            }
-            else if(pollFd.revents & POLL_OUT)
-            {
+            } else if (pollFd.revents & POLL_OUT) {
                 std::cout << "we want to send data!\n";
             }
         }
