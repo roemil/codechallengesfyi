@@ -1,5 +1,7 @@
 #include "LoadBalancer.h"
 
+#include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstddef>
 #include <cstdio>
@@ -15,8 +17,6 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <vector>
-#include <array>
-#include <algorithm>
 
 #include "TcpSocket.h"
 
@@ -72,10 +72,9 @@ void sendData(int clientFd, const std::vector<char>& buffer)
     }
 }
 
-
 void LoadBalancer::forwardToBackend(int clientFd, const std::string_view str)
 {
-    TcpSocket tcpSocket{8080};
+    TcpSocket tcpSocket { 8080 };
     tcpSocket.send(str);
     auto response = tcpSocket.recv();
     ::send(clientFd, response.data(), response.size(), 0);
@@ -148,7 +147,7 @@ void LoadBalancer::start(const std::string_view port)
                 if (pollFd.fd == listener) {
                     logInfo("Client connected. Fd= " + std::to_string(pollFd.fd));
                     int clientFd = acceptNewClient(listener);
-                    fds_.emplace_back(pollfd { .fd = clientFd, .events = POLL_IN, .revents = 0 });
+                    fds_.emplace_back(pollfd { .fd = clientFd, .events = POLL_IN|POLL_OUT, .revents = 0 });
                 } else {
                     const auto state = handleClient(pollFd.fd);
                     if (state == ClientState::Disconnected) {
@@ -159,6 +158,10 @@ void LoadBalancer::start(const std::string_view port)
                             fds_.end());
                     }
                 }
+            }
+            else if(pollFd.revents & POLL_OUT)
+            {
+                std::cout << "we want to send data!\n";
             }
         }
     }

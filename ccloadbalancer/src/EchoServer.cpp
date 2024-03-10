@@ -1,5 +1,7 @@
 #include "EchoServer.h"
 
+#include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstddef>
 #include <cstdio>
@@ -15,8 +17,6 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <vector>
-#include <array>
-#include <algorithm>
 
 #define PORT "8080"
 
@@ -69,7 +69,6 @@ void sendData(int clientFd, const std::vector<char>& buffer)
         logInfo("Sent " + std::to_string(res) + " amount of bytes.");
     }
 }
-
 
 void EchoServer::echoReply(int clientFd, const std::string_view msg)
 {

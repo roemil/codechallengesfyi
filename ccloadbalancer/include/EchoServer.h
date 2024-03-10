@@ -5,21 +5,18 @@
 
 struct pollfd;
 
-enum class ClientState
-{
+enum class ClientState {
     Connected,
     Disconnected
 };
 
-class EchoServer
-{
-    public:
-        void start(const std::string_view port);
+class EchoServer {
+public:
+    void start(const std::string_view port);
 
     void echoReply(int clientFd, const std::string_view str);
     ClientState handleClient(const int clientFd);
 
-    private:
-        std::vector<pollfd> fds_;
-
+private:
+    std::vector<pollfd> fds_;
 };
