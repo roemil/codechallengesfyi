@@ -147,8 +147,8 @@ void EchoServer::start(const std::string_view port)
         for (const auto pollFd : fds_) {
             if (pollFd.revents & POLL_IN) {
                 if (pollFd.fd == listener) {
-                    logInfo("Client connected. Fd= " + std::to_string(pollFd.fd));
                     int clientFd = acceptNewClient(listener);
+                    logInfo("Client connected. Fd= " + std::to_string(clientFd));
                     fds_.emplace_back(pollfd { .fd = clientFd, .events = POLL_IN, .revents = 0 });
                 } else {
                     const auto state = handleClient(pollFd.fd);

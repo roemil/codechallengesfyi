@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cassert>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
@@ -11,12 +10,14 @@
 #include <memory>
 #include <netdb.h>
 #include <poll.h>
-#include <stdexcept>
 #include <string>
+#include <sys/poll.h>
 #include <sys/signal.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <vector>
+
+#include <thread>
 
 #include "TcpSocket.h"
 
@@ -72,35 +73,35 @@ void sendData(int clientFd, const std::vector<char>& buffer)
     }
 }
 
-void LoadBalancer::forwardToBackend(int clientFd, const std::string_view str)
+void LoadBalancer::forwardToBackend(pollfd& event, const std::string_view str)
 {
-    TcpSocket tcpSocket { 8081 };
-    tcpSocket.send(str);
-    auto response = tcpSocket.recv();
-    ::send(clientFd, response.data(), response.size(), 0);
+    TcpSocket backend{8081};
+    logInfo("Forwarding FD: " + std::to_string(backend.getFd()));
+    backend.send(str);
+    auto response = backend.recv();
+    ::send(event.fd, response.data(), response.size(), 0);
 }
 
-ClientState LoadBalancer::handleClient(const int clientFd)
+void LoadBalancer::handleClient(pollfd& event)
 {
     std::array<char, 1024> buf {};
-    while (true) {
+    const auto clientFd = event.fd;
+
         int n = recv(clientFd, buf.data(), 1024, 0);
-        if (n == 0) {
-            // client closed the connection
-            logInfo("Client disconnected");
-            return ClientState::Disconnected;
-        }
         if (n < 0) {
             logInfo("Received " + std::to_string(n) + " . There is an error");
             logInfo("errno: " + std::to_string(errno));
             // Remove client.
-            return ClientState::Disconnected;
+            event.fd = -1;
+            return;
         }
         logInfo("Received " + std::to_string(n) + " amount of bytes");
         logInfo("Received msg: " + std::string { buf.data(), static_cast<size_t>(n) });
-        forwardToBackend(clientFd, std::string_view { buf.data(), static_cast<size_t>(n) });
-        return ClientState::Connected;
-    }
+        // To avoid copies the data could be moved to a unique_ptr/shared_ptr
+        std::thread t(forwardToBackend, std::ref(event), std::string { buf.data(), static_cast<size_t>(n) });
+        // TODO: Now we dont care if there are any issues while forwarding/waiting for the request.
+        // Not the best... Should probably not detach but try to join.
+        t.detach();
 }
 
 int acceptNewClient(int listener)
@@ -111,11 +112,29 @@ int acceptNewClient(int listener)
     return clientFd;
 }
 
+void LoadBalancer::registerFileDescriptor(int fd, short flags)
+{
+    fds_.emplace_back(pollfd { .fd = fd, .events = flags, .revents = 0 });
+}
+
+namespace
+{
+    void purgeInvalidFds(std::vector<pollfd>& fds)
+    {
+        
+        fds.erase(std::remove_if(fds.begin(), fds.end(), [](const pollfd fdElem) {
+        return fdElem.fd == -1;
+    }),
+        fds.end());
+    }
+}
+
 void LoadBalancer::start(const std::string_view port)
 {
     // servinfo now points to a linked list of 1 or more struct addrinfos
     const auto servinfo = getAddrInfo(port);
     int listener = createListener(*servinfo);
+    logInfo("Listener: " + std::to_string(listener));
 
     int bindResult = bind(listener, servinfo->ai_addr, servinfo->ai_addrlen);
     if (bindResult == -1) {
@@ -131,7 +150,9 @@ void LoadBalancer::start(const std::string_view port)
     }
 
     fds_.reserve(maxClients);
-    fds_.emplace_back(pollfd { .fd = listener, .events = POLL_IN, .revents = 0 });
+    registerFileDescriptor(listener, POLL_IN);
+
+    std::vector<std::thread> threads;
 
     while (true) {
         logInfo("Waiting for poll...");
@@ -142,26 +163,40 @@ void LoadBalancer::start(const std::string_view port)
             exit(1);
         }
 
-        for (const auto pollFd : fds_) {
-            if (pollFd.revents & POLL_IN) {
-                if (pollFd.fd == listener) {
-                    logInfo("Client connected. Fd= " + std::to_string(pollFd.fd));
+        for (auto& pollFd : fds_) {
+            logInfo("fd: " + std::to_string(pollFd.fd));
+            logInfo(std::to_string(pollFd.revents));
+            if (pollFd.revents & POLL_IN)
+            {
+                if (pollFd.fd == listener)
+                {
                     int clientFd = acceptNewClient(listener);
-                    fds_.emplace_back(pollfd { .fd = clientFd, .events = POLL_IN | POLL_OUT, .revents = 0 });
-                } else {
-                    const auto state = handleClient(pollFd.fd);
-                    if (state == ClientState::Disconnected) {
-                        auto fdToRemove = pollFd.fd;
-                        fds_.erase(std::remove_if(fds_.begin(), fds_.end(), [fdToRemove](pollfd fdElem) {
-                            return fdElem.fd == fdToRemove;
-                        }),
-                            fds_.end());
-                    }
+                    logInfo("Client connected. Fd= " + std::to_string(clientFd));
+                    registerFileDescriptor(clientFd, POLL_IN | POLL_OUT);
                 }
-            } else if (pollFd.revents & POLL_OUT) {
-                std::cout << "we want to send data!\n";
+                else
+                {
+                    int n = recv(pollFd.fd, nullptr, 1024, MSG_PEEK);
+                    if(n == 0)
+                    {
+                        // client disconnected - mark as invalid
+                        pollFd.fd = -1;
+                        continue;
+                    }
+                    // TODO: join thread when we are ready to pollout?
+                    handleClient(pollFd);
+                }
+            }
+            else if(pollFd.revents & POLL_OUT)
+            {
+                logInfo("Got revent pollout for: " + std::to_string(pollFd.fd));
+            }
+            else if(pollFd.events & POLL_OUT)
+            {
+                logInfo("Got event pollout for: " + std::to_string(pollFd.fd));
             }
         }
+        purgeInvalidFds(fds_);
     }
 }
 

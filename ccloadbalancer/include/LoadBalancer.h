@@ -14,8 +14,9 @@ class LoadBalancer {
 public:
     void start(const std::string_view port);
 
-    void forwardToBackend(int clientFd, const std::string_view str);
-    ClientState handleClient(const int clientFd);
+    static void forwardToBackend(pollfd& clientFd, const std::string_view str);
+    static void handleClient(pollfd& clientFd);
+    void registerFileDescriptor(int fd, short flags);
 
 private:
     std::vector<pollfd> fds_;

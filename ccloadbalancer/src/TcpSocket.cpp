@@ -21,8 +21,8 @@
 TcpSocket::TcpSocket(int port)
 {
     struct sockaddr_in serv_addr;
-    if ((client_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        throw std::invalid_argument { "Socket creation error " };
+    if ((clientFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        throw std::invalid_argument { "Socket creation error " + std::to_string(errno)};
     }
 
     serv_addr.sin_family = AF_INET;
@@ -32,25 +32,25 @@ TcpSocket::TcpSocket(int port)
     // form
     if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr)
         <= 0) {
-        throw std::invalid_argument { "Invalid address/ Address not supported" };
+        throw std::invalid_argument { "Invalid address/ Address not supported" + std::to_string(errno)};
     }
 
-    if ((::connect(client_fd, (struct sockaddr*)&serv_addr,
+    if ((::connect(clientFd, (struct sockaddr*)&serv_addr,
             sizeof(serv_addr)))
         < 0) {
-        throw std::invalid_argument { "Connection Failed" };
+        throw std::invalid_argument { "Connection Failed. errno: " + std::to_string(errno)};
     }
 }
 
-void TcpSocket::send(const std::string_view data)
+int TcpSocket::send(const std::string_view data) const noexcept
 {
-    ::send(client_fd, data.data(), data.length(), 0);
+    return ::send(clientFd, data.data(), data.length(), 0);
 }
 
 std::array<char, 1024> TcpSocket::recv()
 {
     std::array<char, 1024> buffer { 0 };
-    auto valread = ::read(client_fd, buffer.data(),
+    auto valread = ::read(clientFd, buffer.data(),
         buffer.size() - 1); // subtract 1 for the null
                             // terminator at the end
     std::cout << "Read " << valread << " number of bytes\n";
@@ -59,7 +59,12 @@ std::array<char, 1024> TcpSocket::recv()
     return buffer;
 }
 
+int TcpSocket::getFd() const noexcept
+{
+    return clientFd;
+}
+
 TcpSocket::~TcpSocket()
 {
-    close(client_fd);
+    close(clientFd);
 }

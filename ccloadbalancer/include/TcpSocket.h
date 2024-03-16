@@ -5,13 +5,15 @@
 
 class TcpSocket {
 public:
+    TcpSocket() = default;
     TcpSocket(int port);
     ~TcpSocket();
 
-    void connect();
-    void send(std::string_view data);
+    int send(std::string_view data) const noexcept;
     std::array<char, 1024> recv();
 
+    int getFd() const noexcept;
+
 private:
-    int client_fd {};
+    int clientFd {};
 };
