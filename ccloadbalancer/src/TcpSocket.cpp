@@ -22,7 +22,7 @@ TcpSocket::TcpSocket(int port)
 {
     struct sockaddr_in serv_addr;
     if ((clientFd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        throw std::invalid_argument { "Socket creation error " + std::to_string(errno)};
+        throw std::invalid_argument { "Socket creation error " + std::to_string(errno) };
     }
 
     serv_addr.sin_family = AF_INET;
@@ -32,13 +32,13 @@ TcpSocket::TcpSocket(int port)
     // form
     if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr)
         <= 0) {
-        throw std::invalid_argument { "Invalid address/ Address not supported" + std::to_string(errno)};
+        throw std::invalid_argument { "Invalid address/ Address not supported" + std::to_string(errno) };
     }
 
     if ((::connect(clientFd, (struct sockaddr*)&serv_addr,
             sizeof(serv_addr)))
         < 0) {
-        throw std::invalid_argument { "Connection Failed. errno: " + std::to_string(errno)};
+        throw std::invalid_argument { "Connection Failed. errno: " + std::to_string(errno) };
     }
 }
 

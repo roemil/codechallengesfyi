@@ -8,6 +8,7 @@
 #include <cstring>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <netdb.h>
 #include <poll.h>
 #include <string>
@@ -73,35 +74,44 @@ void sendData(int clientFd, const std::vector<char>& buffer)
     }
 }
 
-void LoadBalancer::forwardToBackend(pollfd& event, const std::string_view str)
+void LoadBalancer::forwardToBackend(Client& client, const std::string_view data)
 {
-    TcpSocket backend{8081};
+    TcpSocket backend { 8081 };
     logInfo("Forwarding FD: " + std::to_string(backend.getFd()));
-    backend.send(str);
+    auto sendRes = backend.send(data);
+    std::lock_guard<std::mutex> lock(client.mutex);
+    if (sendRes < 0) {
+        client.pollFd.fd = -1;
+        return;
+    }
     auto response = backend.recv();
-    ::send(event.fd, response.data(), response.size(), 0);
+    auto sendBackToClientRes = ::send(client.pollFd.fd, response.data(), response.size(), 0);
+    if (sendBackToClientRes < 0) {
+        client.pollFd.fd = -1;
+        return;
+    }
 }
 
-void LoadBalancer::handleClient(pollfd& event)
+void LoadBalancer::handleClient(Client& client)
 {
     std::array<char, 1024> buf {};
-    const auto clientFd = event.fd;
+    std::lock_guard<std::mutex> lock(client.mutex);
+    const auto clientFd = client.pollFd.fd;
 
-        int n = recv(clientFd, buf.data(), 1024, 0);
-        if (n < 0) {
-            logInfo("Received " + std::to_string(n) + " . There is an error");
-            logInfo("errno: " + std::to_string(errno));
-            // Remove client.
-            event.fd = -1;
-            return;
-        }
-        logInfo("Received " + std::to_string(n) + " amount of bytes");
-        logInfo("Received msg: " + std::string { buf.data(), static_cast<size_t>(n) });
-        // To avoid copies the data could be moved to a unique_ptr/shared_ptr
-        std::thread t(forwardToBackend, std::ref(event), std::string { buf.data(), static_cast<size_t>(n) });
-        // TODO: Now we dont care if there are any issues while forwarding/waiting for the request.
-        // Not the best... Should probably not detach but try to join.
-        t.detach();
+    int n = recv(clientFd, buf.data(), 1024, 0);
+    if (n < 0) {
+        logInfo("Received " + std::to_string(n) + " . There is an error");
+        logInfo("errno: " + std::to_string(errno));
+        // Remove client.
+        client.pollFd.fd = -1;
+        return;
+    }
+    logInfo("Received " + std::to_string(n) + " amount of bytes");
+    logInfo("Received msg: " + std::string { buf.data(), static_cast<size_t>(n) });
+    // To avoid copies the data could be moved to a unique_ptr/shared_ptr
+    std::thread t(forwardToBackend, std::ref(client), std::string { buf.data(), static_cast<size_t>(n) });
+    // TODO: Not the best... Should probably not detach but try to join.
+    t.detach();
 }
 
 int acceptNewClient(int listener)
@@ -114,19 +124,49 @@ int acceptNewClient(int listener)
 
 void LoadBalancer::registerFileDescriptor(int fd, short flags)
 {
-    fds_.emplace_back(pollfd { .fd = fd, .events = flags, .revents = 0 });
+    Client client {};
+    client.pollFd = pollfd { .fd = fd, .events = flags, .revents = 0 };
+    clients_[fd] = (client);
+    fds_.push_back(client.pollFd);
 }
 
-namespace
+namespace {
+void purgeInvalidFds(std::vector<pollfd>& clients)
 {
-    void purgeInvalidFds(std::vector<pollfd>& fds)
-    {
-        
-        fds.erase(std::remove_if(fds.begin(), fds.end(), [](const pollfd fdElem) {
-        return fdElem.fd == -1;
+
+    clients.erase(std::remove_if(clients.begin(), clients.end(), [](const pollfd client) {
+        return client.fd == -1;
     }),
-        fds.end());
+        clients.end());
+}
+void purgeInvalidClients(std::map<int, Client>& clients)
+{
+
+    auto itr = clients.begin();
+    while (itr != clients.end()) {
+        if ((*itr).second.pollFd.fd == -1) {
+            itr = clients.erase(itr);
+        } else {
+            itr++;
+        }
     }
+}
+
+void markFdsForRemoval(std::vector<pollfd>& fds, const std::map<int, Client>& clients)
+{
+    for (auto& [fd, client] : clients) {
+        std::lock_guard<std::mutex> lock(client.mutex);
+        if (client.pollFd.fd == -1) {
+            auto iter = std::find_if(fds.begin(), fds.end(), [fd](pollfd pfd) {
+                return fd == pfd.fd;
+            });
+            if (iter == fds.end()) {
+                continue;
+            }
+            iter->fd = -1;
+        }
+    }
+}
 }
 
 void LoadBalancer::start(const std::string_view port)
@@ -149,54 +189,45 @@ void LoadBalancer::start(const std::string_view port)
         exit(1);
     }
 
-    fds_.reserve(maxClients);
     registerFileDescriptor(listener, POLL_IN);
-
-    std::vector<std::thread> threads;
 
     while (true) {
         logInfo("Waiting for poll...");
-        int pollCount = poll(fds_.data(), fds_.size(), -1);
+        int pollCount = ::poll(fds_.data(), fds_.size(), -1);
         logInfo("Polled: " + std::to_string(pollCount));
         if (pollCount == -1) {
             perror("poll");
             exit(1);
         }
 
-        for (auto& pollFd : fds_) {
-            logInfo("fd: " + std::to_string(pollFd.fd));
-            logInfo(std::to_string(pollFd.revents));
-            if (pollFd.revents & POLL_IN)
-            {
-                if (pollFd.fd == listener)
-                {
+        for (auto& fd : fds_) {
+            auto pollFd = fd;
+            if (pollFd.revents & POLL_IN) {
+                if (pollFd.fd == listener) {
                     int clientFd = acceptNewClient(listener);
                     logInfo("Client connected. Fd= " + std::to_string(clientFd));
                     registerFileDescriptor(clientFd, POLL_IN | POLL_OUT);
-                }
-                else
-                {
+                } else {
                     int n = recv(pollFd.fd, nullptr, 1024, MSG_PEEK);
-                    if(n == 0)
-                    {
+                    if (n == 0) {
                         // client disconnected - mark as invalid
-                        pollFd.fd = -1;
+                        std::lock_guard<std::mutex> lock(clients_[pollFd.fd].mutex);
+                        clients_[pollFd.fd].pollFd.fd = -1;
                         continue;
                     }
                     // TODO: join thread when we are ready to pollout?
-                    handleClient(pollFd);
+                    handleClient(clients_[pollFd.fd]);
                 }
-            }
-            else if(pollFd.revents & POLL_OUT)
-            {
+            } else if (pollFd.revents & POLL_OUT) {
                 logInfo("Got revent pollout for: " + std::to_string(pollFd.fd));
-            }
-            else if(pollFd.events & POLL_OUT)
-            {
+            } else if (pollFd.events & POLL_OUT) {
                 logInfo("Got event pollout for: " + std::to_string(pollFd.fd));
             }
         }
+
+        markFdsForRemoval(fds_, clients_);
         purgeInvalidFds(fds_);
+        purgeInvalidClients(clients_);
     }
 }
 
