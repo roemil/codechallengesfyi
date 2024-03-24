@@ -11,12 +11,15 @@
 #include <mutex>
 #include <netdb.h>
 #include <poll.h>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <sys/poll.h>
 #include <sys/signal.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <vector>
+#include <chrono>
 
 #include <thread>
 
@@ -74,22 +77,64 @@ void sendData(int clientFd, const std::vector<char>& buffer)
     }
 }
 
-void LoadBalancer::forwardToBackend(Client& client, const std::string_view data)
+LoadBalancer::LoadBalancer() // : healthCheckerThread {[this](){ this->healthChecker(); }}
 {
-    TcpSocket backend { 8081 };
-    logInfo("Forwarding FD: " + std::to_string(backend.getFd()));
-    auto sendRes = backend.send(data);
+}
+
+LoadBalancer::~LoadBalancer()
+{
+   //healthCheckerThread.join();
+}
+
+
+int LoadBalancer::getNextPort()
+{
+    std::lock_guard<std::mutex> lock{beMutex};
+    int nextPortIndex = 0;
+    do {
+        nextPortIndex = numForwards % backendServers.size();
+        ++numForwards;
+    }while (!backendServers[nextPortIndex].second);
+
+    return backendServers[nextPortIndex].first;
+    
+}
+
+void LoadBalancer::forwardToBackend(Client& client, const std::string data, int port)
+{
     std::lock_guard<std::mutex> lock(client.mutex);
-    if (sendRes < 0) {
-        client.pollFd.fd = -1;
-        return;
+    int maxRetries = 3;
+    while(true)
+    {
+        try {
+            TcpSocket backend { port };
+
+            logInfo("Forwarding FD: " + std::to_string(backend.getFd()));
+            auto sendRes = backend.send(data);
+            if (sendRes < 0) {
+                client.pollFd.fd = -1;
+                return;
+            }
+            auto response = backend.recv();
+            auto sendBackToClientRes = ::send(client.pollFd.fd, response.data(), response.size(), 0);
+            if (sendBackToClientRes < 0) {
+                client.pollFd.fd = -1;
+                return;
+            }
+            return;
+
+        } catch (const std::invalid_argument& e) {
+            logInfo(e.what());
+            maxRetries--;
+            if(maxRetries == 0)
+            {
+                client.pollFd.fd = -1;
+                return;
+            }
+        }
+
     }
-    auto response = backend.recv();
-    auto sendBackToClientRes = ::send(client.pollFd.fd, response.data(), response.size(), 0);
-    if (sendBackToClientRes < 0) {
-        client.pollFd.fd = -1;
-        return;
-    }
+    return;
 }
 
 void LoadBalancer::handleClient(Client& client)
@@ -109,7 +154,7 @@ void LoadBalancer::handleClient(Client& client)
     logInfo("Received " + std::to_string(n) + " amount of bytes");
     logInfo("Received msg: " + std::string { buf.data(), static_cast<size_t>(n) });
     // To avoid copies the data could be moved to a unique_ptr/shared_ptr
-    std::thread t(forwardToBackend, std::ref(client), std::string { buf.data(), static_cast<size_t>(n) });
+    std::thread t(forwardToBackend, std::ref(client), std::string { buf.data(), static_cast<size_t>(n) }, getNextPort());
     // TODO: Not the best... Should probably not detach but try to join.
     t.detach();
 }
@@ -169,6 +214,34 @@ void markFdsForRemoval(std::vector<pollfd>& fds, const std::map<int, Client>& cl
 }
 }
 
+void LoadBalancer::healthChecker()
+{
+    std::lock_guard<std::mutex> lock{beMutex};
+    for(auto& port : backendServers)
+    {
+        // Try all ports, if port succeeds we mark it as alive,
+        // otherwise we mark port as dead.
+        try {
+            TcpSocket socket{port.first};
+            port.second = true;
+        } catch (const std::invalid_argument& e) {
+            logInfo("Server " + std::to_string(port.first) + " is down. Error: " + e.what());
+            port.second = false;
+        }
+    }
+}
+
+void LoadBalancer::healthCheckerMain()
+{
+    while(true)
+    {
+        logInfo("Checking backends");
+        healthChecker();
+        using namespace std::chrono_literals;
+        std::this_thread::sleep_for(10000ms);
+    }
+}
+
 void LoadBalancer::start(const std::string_view port)
 {
     // servinfo now points to a linked list of 1 or more struct addrinfos
@@ -188,6 +261,9 @@ void LoadBalancer::start(const std::string_view port)
         perror("listen");
         exit(1);
     }
+
+     std::thread t {[this](){ this->healthCheckerMain(); }};
+     t.detach();
 
     registerFileDescriptor(listener, POLL_IN);
 
@@ -231,8 +307,17 @@ void LoadBalancer::start(const std::string_view port)
     }
 }
 
+
+void LoadBalancer::addBackend(int port)
+{
+    // Assume port is alive as default
+    backendServers.emplace_back(port, true);
+}
+
 int main()
 {
     LoadBalancer server {};
+    server.addBackend(8081);
+    server.addBackend(8082);
     server.start(PORT);
 }

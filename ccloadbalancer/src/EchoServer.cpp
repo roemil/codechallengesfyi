@@ -165,8 +165,13 @@ void EchoServer::start(const std::string_view port)
     }
 }
 
-int main()
+int main(int argc, char* argv[])
 {
+    if(argc != 2)
+    {
+        perror("Must provide port number");
+        exit(1);
+    }
     EchoServer server {};
-    server.start(PORT);
+    server.start(argv[1]);
 }

@@ -5,6 +5,7 @@
 #include <poll.h>
 #include <string_view>
 #include <vector>
+#include <thread>
 
 struct Client {
     Client() = default;
@@ -33,15 +34,29 @@ struct Client {
     }
 };
 
+
 class LoadBalancer {
 public:
+    LoadBalancer();
+    ~LoadBalancer();
     void start(const std::string_view port);
 
-    static void forwardToBackend(Client& client, const std::string_view data);
-    static void handleClient(Client& client);
+    static void forwardToBackend(Client& client, std::string data, int port);
+    void handleClient(Client& client);
     void registerFileDescriptor(int fd, short flags);
 
+    void addBackend(int port);
+    int getNextPort();
+
 private:
+    void healthChecker();
+    void healthCheckerMain();
+    std::thread healthCheckerThread;
+
     std::map<int, Client> clients_ {};
     std::vector<pollfd> fds_;
+
+    int numForwards{};
+    std::mutex beMutex{};
+    std::vector<std::pair<int, bool>> backendServers{};
 };
