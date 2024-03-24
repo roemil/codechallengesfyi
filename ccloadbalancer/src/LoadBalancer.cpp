@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
@@ -19,7 +20,6 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <vector>
-#include <chrono>
 
 #include <thread>
 
@@ -77,35 +77,33 @@ void sendData(int clientFd, const std::vector<char>& buffer)
     }
 }
 
-LoadBalancer::LoadBalancer() // : healthCheckerThread {[this](){ this->healthChecker(); }}
+LoadBalancer::LoadBalancer() : healthCheckerThread {[this](){ this->startHealthChecker(); }}
 {
 }
 
 LoadBalancer::~LoadBalancer()
 {
-   //healthCheckerThread.join();
+    healthCheckerThread.join();
 }
 
-
+// TODO: Error handling
 int LoadBalancer::getNextPort()
 {
-    std::lock_guard<std::mutex> lock{beMutex};
+    std::lock_guard<std::mutex> lock { beMutex };
     int nextPortIndex = 0;
     do {
         nextPortIndex = numForwards % backendServers.size();
         ++numForwards;
-    }while (!backendServers[nextPortIndex].second);
+    } while (!backendServers[nextPortIndex].second);
 
     return backendServers[nextPortIndex].first;
-    
 }
 
 void LoadBalancer::forwardToBackend(Client& client, const std::string data, int port)
 {
     std::lock_guard<std::mutex> lock(client.mutex);
     int maxRetries = 3;
-    while(true)
-    {
+    while (true) {
         try {
             TcpSocket backend { port };
 
@@ -126,13 +124,11 @@ void LoadBalancer::forwardToBackend(Client& client, const std::string data, int 
         } catch (const std::invalid_argument& e) {
             logInfo(e.what());
             maxRetries--;
-            if(maxRetries == 0)
-            {
+            if (maxRetries == 0) {
                 client.pollFd.fd = -1;
                 return;
             }
         }
-
     }
     return;
 }
@@ -154,6 +150,7 @@ void LoadBalancer::handleClient(Client& client)
     logInfo("Received " + std::to_string(n) + " amount of bytes");
     logInfo("Received msg: " + std::string { buf.data(), static_cast<size_t>(n) });
     // To avoid copies the data could be moved to a unique_ptr/shared_ptr
+    // TODO: use std::async
     std::thread t(forwardToBackend, std::ref(client), std::string { buf.data(), static_cast<size_t>(n) }, getNextPort());
     // TODO: Not the best... Should probably not detach but try to join.
     t.detach();
@@ -214,15 +211,14 @@ void markFdsForRemoval(std::vector<pollfd>& fds, const std::map<int, Client>& cl
 }
 }
 
-void LoadBalancer::healthChecker()
+void LoadBalancer::checkAllBackends()
 {
-    std::lock_guard<std::mutex> lock{beMutex};
-    for(auto& port : backendServers)
-    {
+    std::lock_guard<std::mutex> lock { beMutex };
+    for (auto& port : backendServers) {
         // Try all ports, if port succeeds we mark it as alive,
         // otherwise we mark port as dead.
         try {
-            TcpSocket socket{port.first};
+            TcpSocket socket { port.first };
             port.second = true;
         } catch (const std::invalid_argument& e) {
             logInfo("Server " + std::to_string(port.first) + " is down. Error: " + e.what());
@@ -231,12 +227,11 @@ void LoadBalancer::healthChecker()
     }
 }
 
-void LoadBalancer::healthCheckerMain()
+void LoadBalancer::startHealthChecker()
 {
-    while(true)
-    {
+    while (true) {
         logInfo("Checking backends");
-        healthChecker();
+        checkAllBackends();
         using namespace std::chrono_literals;
         std::this_thread::sleep_for(10000ms);
     }
@@ -261,9 +256,6 @@ void LoadBalancer::start(const std::string_view port)
         perror("listen");
         exit(1);
     }
-
-     std::thread t {[this](){ this->healthCheckerMain(); }};
-     t.detach();
 
     registerFileDescriptor(listener, POLL_IN);
 
@@ -306,7 +298,6 @@ void LoadBalancer::start(const std::string_view port)
         purgeInvalidClients(clients_);
     }
 }
-
 
 void LoadBalancer::addBackend(int port)
 {

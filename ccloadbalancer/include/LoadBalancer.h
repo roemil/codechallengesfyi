@@ -4,8 +4,8 @@
 #include <mutex>
 #include <poll.h>
 #include <string_view>
-#include <vector>
 #include <thread>
+#include <vector>
 
 struct Client {
     Client() = default;
@@ -34,7 +34,6 @@ struct Client {
     }
 };
 
-
 class LoadBalancer {
 public:
     LoadBalancer();
@@ -49,14 +48,14 @@ public:
     int getNextPort();
 
 private:
-    void healthChecker();
-    void healthCheckerMain();
+    void checkAllBackends();
+    void startHealthChecker();
     std::thread healthCheckerThread;
 
     std::map<int, Client> clients_ {};
     std::vector<pollfd> fds_;
 
-    int numForwards{};
-    std::mutex beMutex{};
-    std::vector<std::pair<int, bool>> backendServers{};
+    int numForwards {};
+    std::mutex beMutex {};
+    std::vector<std::pair<int, bool>> backendServers {};
 };
