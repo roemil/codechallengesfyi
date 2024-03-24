@@ -5,13 +5,15 @@
 #include <poll.h>
 #include <string_view>
 #include <thread>
+#include <future>
+#include <optional>
 #include <vector>
 
 struct Client {
     Client() = default;
     // TODO: Read/Write locks perhaps
-    mutable std::mutex mutex;
-    pollfd pollFd;
+    mutable std::mutex mutex{};
+    pollfd pollFd{};
 
     Client(const Client& other)
     {
@@ -34,14 +36,20 @@ struct Client {
     }
 };
 
+enum class ForwardResult
+{
+    Success,
+    Failure
+};
+
 class LoadBalancer {
 public:
     LoadBalancer();
     ~LoadBalancer();
     void start(const std::string_view port);
 
-    static void forwardToBackend(Client& client, std::string data, int port);
-    void handleClient(Client& client);
+    static ForwardResult forwardToBackend(Client& client, std::string data, int port);
+    std::optional<std::future<ForwardResult>> handleClient(Client& client);
     void registerFileDescriptor(int fd, short flags);
 
     void addBackend(int port);
@@ -53,7 +61,7 @@ private:
     std::thread healthCheckerThread;
 
     std::map<int, Client> clients_ {};
-    std::vector<pollfd> fds_;
+    std::vector<pollfd> fds_{};
 
     int numForwards {};
     std::mutex beMutex {};
