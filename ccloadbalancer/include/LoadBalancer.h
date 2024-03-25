@@ -1,19 +1,19 @@
-#pragma once
+    #pragma once
 
+#include <future>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <poll.h>
 #include <string_view>
 #include <thread>
-#include <future>
-#include <optional>
 #include <vector>
 
 struct Client {
     Client() = default;
     // TODO: Read/Write locks perhaps
-    mutable std::mutex mutex{};
-    pollfd pollFd{};
+    mutable std::mutex mutex {};
+    pollfd pollFd {};
 
     Client(const Client& other)
     {
@@ -36,8 +36,7 @@ struct Client {
     }
 };
 
-enum class ForwardResult
-{
+enum class ForwardResult {
     Success,
     Failure
 };
@@ -56,12 +55,14 @@ public:
     int getNextPort();
 
 private:
+    bool isReady_ = false;
+    int getNextPortIndex();
     void checkAllBackends();
     void startHealthChecker();
     std::thread healthCheckerThread;
 
     std::map<int, Client> clients_ {};
-    std::vector<pollfd> fds_{};
+    std::vector<pollfd> fds_ {};
 
     int numForwards {};
     std::mutex beMutex {};

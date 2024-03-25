@@ -1,4 +1,4 @@
-#include "EchoServer.h"
+#include "EchoServer/EchoServer.h"
 
 #include <algorithm>
 #include <array>
@@ -22,6 +22,8 @@
 
 using servInfo = std::unique_ptr<addrinfo, decltype(&freeaddrinfo)>;
 
+namespace detail
+{
 std::unique_ptr<addrinfo, decltype(&freeaddrinfo)> getAddrInfo(const std::string_view port)
 {
     struct addrinfo hints;
@@ -68,7 +70,7 @@ void sendData(int clientFd, const std::vector<char>& buffer)
     } else {
         logInfo("Sent " + std::to_string(res) + " amount of bytes.");
     }
-}
+}}
 
 void EchoServer::echoReply(int clientFd, const std::string_view msg)
 {
@@ -76,9 +78,9 @@ void EchoServer::echoReply(int clientFd, const std::string_view msg)
     if (res == -1) {
         perror("send");
     } else if (static_cast<size_t>(res) != msg.size()) {
-        logInfo("All bytes were not sent " + std::to_string(res));
+        detail::logInfo("All bytes were not sent " + std::to_string(res));
     } else {
-        logInfo("Sent " + std::to_string(res) + " amount of bytes.");
+        detail::logInfo("Sent " + std::to_string(res) + " amount of bytes.");
     }
 }
 
@@ -89,35 +91,35 @@ ClientState EchoServer::handleClient(const int clientFd)
         int n = recv(clientFd, buf.data(), 1024, 0);
         if (n == 0) {
             // client closed the connection
-            logInfo("Client disconnected");
+            detail::logInfo("Client disconnected");
             return ClientState::Disconnected;
         }
         if (n < 0) {
-            logInfo("Received " + std::to_string(n) + " . There is an error");
-            logInfo("errno: " + std::to_string(errno));
+            detail::logInfo("Received " + std::to_string(n) + " . There is an error");
+            detail::logInfo("errno: " + std::to_string(errno));
             // Remove client.
             return ClientState::Disconnected;
         }
-        logInfo("Received " + std::to_string(n) + " amount of bytes");
-        logInfo("Received msg: " + std::string { buf.data(), static_cast<size_t>(n) });
+        detail::logInfo("Received " + std::to_string(n) + " amount of bytes");
+        detail::logInfo("Received msg: " + std::string { buf.data(), static_cast<size_t>(n) });
         echoReply(clientFd, std::string_view { buf.data(), static_cast<size_t>(n) });
         return ClientState::Connected;
     }
 }
-
+namespace detail{
 int acceptNewClient(int listener)
 {
     struct sockaddr_storage their_addr;
     socklen_t addr_size = sizeof their_addr;
     int clientFd = accept(listener, (struct sockaddr*)&their_addr, &addr_size);
     return clientFd;
-}
+}}
 
 void EchoServer::start(const std::string_view port)
 {
     // servinfo now points to a linked list of 1 or more struct addrinfos
-    const auto servinfo = getAddrInfo(port);
-    int listener = createListener(*servinfo);
+    const auto servinfo = detail::getAddrInfo(port);
+    int listener = detail::createListener(*servinfo);
 
     int bindResult = bind(listener, servinfo->ai_addr, servinfo->ai_addrlen);
     if (bindResult == -1) {
@@ -136,9 +138,9 @@ void EchoServer::start(const std::string_view port)
     fds_.emplace_back(pollfd { .fd = listener, .events = POLL_IN, .revents = 0 });
 
     while (true) {
-        logInfo("Waiting for poll...");
+        detail::logInfo("Waiting for poll...");
         int pollCount = poll(fds_.data(), fds_.size(), -1);
-        logInfo("Polled: " + std::to_string(pollCount));
+        detail::logInfo("Polled: " + std::to_string(pollCount));
         if (pollCount == -1) {
             perror("poll");
             exit(1);
@@ -147,8 +149,8 @@ void EchoServer::start(const std::string_view port)
         for (const auto pollFd : fds_) {
             if (pollFd.revents & POLL_IN) {
                 if (pollFd.fd == listener) {
-                    int clientFd = acceptNewClient(listener);
-                    logInfo("Client connected. Fd= " + std::to_string(clientFd));
+                    int clientFd = detail::acceptNewClient(listener);
+                    detail::logInfo("Client connected. Fd= " + std::to_string(clientFd));
                     fds_.emplace_back(pollfd { .fd = clientFd, .events = POLL_IN, .revents = 0 });
                 } else {
                     const auto state = handleClient(pollFd.fd);
@@ -165,12 +167,3 @@ void EchoServer::start(const std::string_view port)
     }
 }
 
-int main(int argc, char* argv[])
-{
-    if (argc != 2) {
-        perror("Must provide port number");
-        exit(1);
-    }
-    EchoServer server {};
-    server.start(argv[1]);
-}

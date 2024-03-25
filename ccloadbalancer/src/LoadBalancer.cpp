@@ -13,6 +13,7 @@
 #include <memory>
 #include <mutex>
 #include <netdb.h>
+#include <optional>
 #include <poll.h>
 #include <stdexcept>
 #include <string>
@@ -22,7 +23,6 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <vector>
-#include <optional>
 
 #include <thread>
 
@@ -65,7 +65,7 @@ int createListener(const addrinfo& addrInfo)
 
 void logInfo(const std::string_view str)
 {
-    std::cout << "[INFO] " << str << "\n";
+    std::cout << "[INFO LB] " << str << "\n";
 }
 
 void sendData(int clientFd, const std::vector<char>& buffer)
@@ -91,13 +91,24 @@ LoadBalancer::~LoadBalancer()
 }
 
 // TODO: Error handling
-int LoadBalancer::getNextPort()
+
+int LoadBalancer::getNextPortIndex()
 {
     std::lock_guard<std::mutex> lock { beMutex };
     int nextPortIndex = 0;
+    std::string nextString {std::to_string(nextPortIndex)};
+    logInfo("Next port " + nextString );
+    nextPortIndex = numForwards % backendServers.size();
+    ++numForwards;
+    return nextPortIndex;
+}
+
+int LoadBalancer::getNextPort()
+{
+    int nextPortIndex = 0;
     do {
-        nextPortIndex = numForwards % backendServers.size();
-        ++numForwards;
+        nextPortIndex = getNextPortIndex();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     } while (!backendServers[nextPortIndex].second);
 
     return backendServers[nextPortIndex].first;
@@ -157,7 +168,6 @@ std::optional<std::future<ForwardResult>> LoadBalancer::handleClient(Client& cli
     logInfo("Received msg: " + std::string { buf.data(), static_cast<size_t>(n) });
     // To avoid copies the data could be moved to a unique_ptr/shared_ptr
     return std::async(forwardToBackend, std::ref(client), std::string { buf.data(), static_cast<size_t>(n) }, getNextPort());
-
 }
 
 int acceptNewClient(int listener)
@@ -245,7 +255,7 @@ void LoadBalancer::start(const std::string_view port)
 {
     // servinfo now points to a linked list of 1 or more struct addrinfos
     const auto servinfo = getAddrInfo(port);
-        int listener = createListener(*servinfo);
+    int listener = createListener(*servinfo);
     logInfo("Listener: " + std::to_string(listener));
 
     int bindResult = bind(listener, servinfo->ai_addr, servinfo->ai_addrlen);
@@ -273,7 +283,7 @@ void LoadBalancer::start(const std::string_view port)
         }
 
         std::vector<std::future<ForwardResult>> futureResults;
-        std::vector<int> fdsToRegister{};
+        std::vector<int> fdsToRegister {};
 
         for (const auto& pollFd : fds_) {
             if (pollFd.revents & POLL_IN) {
@@ -290,8 +300,7 @@ void LoadBalancer::start(const std::string_view port)
                         continue;
                     }
                     auto res = handleClient(clients_.at(pollFd.fd));
-                    if(res)
-                    {
+                    if (res) {
                         futureResults.push_back(std::move(res.value()));
                     }
                 }
@@ -302,20 +311,16 @@ void LoadBalancer::start(const std::string_view port)
             }
         }
 
-        for(const auto fd : fdsToRegister)
-        {
+        for (const auto fd : fdsToRegister) {
             registerFileDescriptor(fd, POLL_IN);
         }
 
-        for(auto& fut : futureResults)
-        {
-            if(!fut.valid())
-            {
+        for (auto& fut : futureResults) {
+            if (!fut.valid()) {
                 fut.wait();
             }
             auto res = fut.get();
-            if(res == ForwardResult::Failure)
-            {
+            if (res == ForwardResult::Failure) {
                 // TODO: Close client connection here
                 logInfo("Failed to forward request");
             }
@@ -333,10 +338,3 @@ void LoadBalancer::addBackend(int port)
     backendServers.emplace_back(port, true);
 }
 
-int main()
-{
-    LoadBalancer server {};
-    server.addBackend(8081);
-    server.addBackend(8082);
-    server.start(PORT);
-}
