@@ -96,8 +96,8 @@ int LoadBalancer::getNextPortIndex()
 {
     std::lock_guard<std::mutex> lock { beMutex };
     int nextPortIndex = 0;
-    std::string nextString {std::to_string(nextPortIndex)};
-    logInfo("Next port " + nextString );
+    std::string nextString { std::to_string(nextPortIndex) };
+    logInfo("Next port " + nextString);
     nextPortIndex = numForwards % backendServers.size();
     ++numForwards;
     return nextPortIndex;
@@ -337,4 +337,3 @@ void LoadBalancer::addBackend(int port)
     // Assume port is alive as default
     backendServers.emplace_back(port, true);
 }
-

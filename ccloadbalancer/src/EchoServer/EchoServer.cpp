@@ -22,8 +22,7 @@
 
 using servInfo = std::unique_ptr<addrinfo, decltype(&freeaddrinfo)>;
 
-namespace detail
-{
+namespace detail {
 std::unique_ptr<addrinfo, decltype(&freeaddrinfo)> getAddrInfo(const std::string_view port)
 {
     struct addrinfo hints;
@@ -70,7 +69,8 @@ void sendData(int clientFd, const std::vector<char>& buffer)
     } else {
         logInfo("Sent " + std::to_string(res) + " amount of bytes.");
     }
-}}
+}
+}
 
 void EchoServer::echoReply(int clientFd, const std::string_view msg)
 {
@@ -106,14 +106,15 @@ ClientState EchoServer::handleClient(const int clientFd)
         return ClientState::Connected;
     }
 }
-namespace detail{
+namespace detail {
 int acceptNewClient(int listener)
 {
     struct sockaddr_storage their_addr;
     socklen_t addr_size = sizeof their_addr;
     int clientFd = accept(listener, (struct sockaddr*)&their_addr, &addr_size);
     return clientFd;
-}}
+}
+}
 
 void EchoServer::start(const std::string_view port)
 {
@@ -166,4 +167,3 @@ void EchoServer::start(const std::string_view port)
         }
     }
 }
-
