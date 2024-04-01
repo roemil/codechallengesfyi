@@ -72,15 +72,11 @@ void waitForServer(int port)
 
 TEST_F(LoadBalancerTest, Basic)
 {
-    LoadBalancerThread lb {};
     EchoServerThread backend { "8081" };
-
-    // Issue when lb is started first
-
     waitForServer(8081);
-    waitForServer(8080);
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(11000));
+    LoadBalancerThread lb {};
+    waitForServer(8080);
 
     TestClient client { 8080 };
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
@@ -89,6 +85,21 @@ TEST_F(LoadBalancerTest, Basic)
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
     auto res = client.socket_.recv();
     EXPECT_EQ(std::string { res.data() }, msg);
+}
 
-    std::cout << "done\n";
+
+// Issue when lb is started first
+TEST_F(LoadBalancerTest, NoBackendsAvailable)
+{
+    LoadBalancerThread lb {};
+    waitForServer(8080);
+
+    TestClient client { 8080 };
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    constexpr auto msg = "hello from client";
+    client.socket_.send(msg);
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    auto res = client.socket_.recvWithError();
+    EXPECT_FALSE(res.has_value());
+    EXPECT_EQ(res.error(), 0);
 }

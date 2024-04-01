@@ -12,6 +12,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <expected>
 
 #include <arpa/inet.h>
 
@@ -50,11 +51,27 @@ int TcpSocket::send(const std::string_view data) const noexcept
 std::array<char, 1024> TcpSocket::recv()
 {
     std::array<char, 1024> buffer { 0 };
-    auto valread = ::read(clientFd, buffer.data(),
-        buffer.size() - 1); // subtract 1 for the null
+    auto valread = ::recv(clientFd, buffer.data(),
+        buffer.size() - 1, 0); // subtract 1 for the null
                             // terminator at the end
     std::cout << "Read " << valread << " number of bytes\n";
     buffer[valread] = '\0';
+    std::cout << "received: " << buffer.data() << '\n';
+    return buffer;
+}
+
+std::expected<std::array<char, 1024>, int> TcpSocket::recvWithError()
+{
+    std::array<char, 1024> buffer { 0 };
+    auto bytesRead = ::recv(clientFd, buffer.data(),
+        buffer.size() - 1, 0); // subtract 1 for the null
+                            // terminator at the end
+    std::cout << "Read " << bytesRead << " number of bytes\n";
+    if(bytesRead < 0)
+    {
+        return std::unexpected{bytesRead};
+    }
+    buffer[bytesRead] = '\0';
     std::cout << "received: " << buffer.data() << '\n';
     return buffer;
 }

@@ -23,6 +23,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <vector>
+#include <expected>
 
 #include <thread>
 
@@ -103,14 +104,23 @@ int LoadBalancer::getNextPortIndex()
     return nextPortIndex;
 }
 
-int LoadBalancer::getNextPort()
+std::expected<int, std::string_view> LoadBalancer::getNextPort()
 {
     int nextPortIndex = 0;
-    do {
-        nextPortIndex = getNextPortIndex();
+    int maxTries = 100;
+    while(!backendServers[nextPortIndex].second && maxTries > 0)
+    {
+        --maxTries;
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    } while (!backendServers[nextPortIndex].second);
+        nextPortIndex = getNextPortIndex();
+    }
 
+    if(maxTries <= 0)
+    {
+        return std::unexpected{"No backend available"};
+    }
+
+    // TODO: Fix implicit copy
     return backendServers[nextPortIndex].first;
 }
 
@@ -166,8 +176,19 @@ std::optional<std::future<ForwardResult>> LoadBalancer::handleClient(Client& cli
     }
     logInfo("Received " + std::to_string(n) + " amount of bytes");
     logInfo("Received msg: " + std::string { buf.data(), static_cast<size_t>(n) });
+
+    const auto nextPort = getNextPort();
+
+    if(!nextPort.has_value())
+    {
+        logInfo("Failed to get next port: " + std::string{nextPort.error()});
+        // Remove client.
+        client.pollFd.fd = -1;
+        return std::nullopt;
+    }
+
     // To avoid copies the data could be moved to a unique_ptr/shared_ptr
-    return std::async(forwardToBackend, std::ref(client), std::string { buf.data(), static_cast<size_t>(n) }, getNextPort());
+    return std::async(forwardToBackend, std::ref(client), std::string { buf.data(), static_cast<size_t>(n) }, nextPort.value());
 }
 
 int acceptNewClient(int listener)
@@ -302,6 +323,8 @@ void LoadBalancer::start(const std::string_view port)
                     auto res = handleClient(clients_.at(pollFd.fd));
                     if (res) {
                         futureResults.push_back(std::move(res.value()));
+                    } else {
+                        close(pollFd.fd);
                     }
                 }
             } else if (pollFd.revents & POLL_OUT) {

@@ -8,6 +8,7 @@
 #include <string_view>
 #include <thread>
 #include <vector>
+#include <expected>
 
 struct Client {
     Client() = default;
@@ -52,9 +53,9 @@ public:
     void registerFileDescriptor(int fd, short flags);
 
     void addBackend(int port);
-    int getNextPort();
 
 private:
+    std::expected<int, std::string_view> getNextPort();
     bool isReady_ = false;
     int getNextPortIndex();
     void checkAllBackends();

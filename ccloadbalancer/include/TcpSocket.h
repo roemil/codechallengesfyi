@@ -2,6 +2,7 @@
 
 #include <array>
 #include <string_view>
+#include <expected>
 
 class TcpSocket {
 public:
@@ -11,6 +12,7 @@ public:
 
     int send(std::string_view data) const noexcept;
     std::array<char, 1024> recv();
+    std::expected<std::array<char, 1024>, int> recvWithError();
 
     int getFd() const noexcept;
 
