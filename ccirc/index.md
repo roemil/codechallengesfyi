@@ -20,4 +20,4 @@
 
 ## Screenshot
 
-![image](https://github.com/roemil/codechallengesfyi/blob/master/ccirc/irc_screenshot.png "UI Screenshot")
+![image](irc_screenshot.png)
