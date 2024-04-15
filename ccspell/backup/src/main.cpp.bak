@@ -1,0 +1,245 @@
+#include "BloomFilter.h"
+
+#include <cmath>
+#include <iostream>
+#include <array>
+#include <string_view>
+#include <sstream>
+#include <string>
+#include <fstream>
+#include <cassert>
+#include <arpa/inet.h>
+#include <bitset>
+#include <vector>
+#include <cstring>
+
+int main(int argc, char** argv) {
+    constexpr int n = 1000000;
+    constexpr double epsilon = 0.02;
+
+    constexpr int m = - n * std::log(epsilon) / std::pow(std::log(2),2);
+    std::cout << "m = " << m << "\n";
+    std::cout << "m(hex)" << std::hex << m << "\n";
+    BloomFilter<m> bf{};
+
+    bool buildDict = false;
+    for(int i = 0; i < argc; ++i) {
+        std::string_view str{argv[i]};
+        std::cout << "argv: " << str << "\n";
+        buildDict = str.find("-build") != std::string_view::npos;
+    }
+
+    std::cout << "Building dict...\n";
+    std::ifstream infile("../src/dict.txt");
+    assert(infile.is_open() && "file not open");
+    std::string line;
+    while (std::getline(infile, line))
+    {
+        bf.store(line);
+    }
+    if(buildDict){
+        std::ofstream fs("words.bf", std::ios::out | std::ios::binary | std::ios::app);
+        fs.write("CCBF", 4);
+        auto version = htons(bf.version);
+        std::cout << "version " << std::hex << version << "\n";
+        fs.write(reinterpret_cast<const char*>(&version), 2);
+        auto numhashes = htons(bf.numhashes);
+        fs.write(reinterpret_cast<const char*>(&numhashes), 2);
+        auto firstBytes = htons(bf.m_ >> 16);
+        std::cout << "first " << std::hex << firstBytes << "\n";
+        auto secondBytes = htons(bf.m_ & 0xffff);
+        std::cout << "second " << std::hex << secondBytes << "\n";
+        fs.write(reinterpret_cast<const char*>(&firstBytes), 2);
+        fs.write(reinterpret_cast<const char*>(&secondBytes), 2);
+
+        auto getByte = [ba = bf.bitarray_](int i){
+            uint8_t byte{};
+            for(int j = 0; j < 8; ++j){
+                byte = ba[j+i];
+                if(j < 7){
+                    byte = byte << 1;
+                }
+            }
+            return byte;
+        };
+        std::vector<uint8_t> bits{};
+        for(long unsigned i = 0; i < m / 8; i += 8){
+            bits.push_back(htons(getByte(i)));
+        }
+        std::cout << "bits size " << std::dec << bits.size() << "\n";
+        fs.write(reinterpret_cast<const char*>(bits.data()), bits.size());  
+        
+        //fs.write(reinterpret_cast<const char*>(&bf.bitarray_), m/sizeof(char));
+        fs.close();
+        std::cout << "Done...\n";
+
+        return 0;
+    }
+    std::cout << "version " << std::hex << htons(bf.version) << "\n";
+
+        std::ifstream binfile("words.bf", std::ios::binary);
+        assert(binfile.is_open() && "file not open");
+        std::vector<char> binData((std::istreambuf_iterator<char>(binfile)), (std::istreambuf_iterator<char>()));
+        binfile.close();
+
+        std::string prefix{static_cast<char>(binData[0]),static_cast<char>(binData[1]),static_cast<char>(binData[2]),static_cast<char>(binData[3])};
+        assert(prefix == "CCBF" && "Prefix is incorrect");
+
+        int version=0;
+        version = (+binData[4] << 8);
+        version |= +binData[5];
+        assert(version == 1);
+
+        int numHashes{};
+        numHashes = (+binData[6] << 8);
+        numHashes |= +binData[7];
+
+        int firstByte = 0;
+        firstByte = (+binData[8] << 8);
+        firstByte |= +binData[9];
+
+        int secondByte = 0;
+        secondByte = (+binData[10] << 8);
+        secondByte |= +binData[11];
+
+        int numBits = (firstByte << 16) | secondByte;
+        
+        std::cout << "numbits: " << std::hex << numBits << std::dec << "\n";
+        assert(numBits == m && "Num bits are incorrect");   
+        std::bitset<m> bitset{};
+        std::vector<uint8_t>::size_type i = 12;
+        std::cout << "m / char " << m / sizeof(char) << "\n";
+        std::cout << "char size" << sizeof(char) << "\n";
+        std::cout << "vec size " << binData.size() << "\n";
+        std::cout << "vec size -13 " << binData.size()-13 << "\n";
+        std::cout << "vec size*8 " << binData.size()*8 << "\n";
+        std::cout << "vec size*8-12 " << binData.size()*8-12 << "\n";
+        std::cout << "vec size-13*8 " << (binData.size()-13)*8 << "\n";
+        std::cout << "vec size-12/8 " << (binData.size()-12)/8 << "\n";
+        std::cout << "m " << m << "\n";
+        std::cout << "m/8 " << m/8 << "\n";
+
+        std::memcpy(&bitset, binData.data()+i, (binData.size()-12));
+        std::cout << bf.bitarray_[m-1] << " " << bf.bitarray_[m-2] << " " << bitset[m-1] << " " << bitset[m-2] << "\n";
+        assert(bf.bitarray_ == bitset);
+        bf.bitarray_ = bitset;
+
+    for(int i = 0; i < argc; ++i) {
+        std::string_view str{argv[i]};
+
+        if (bf.lookup(str)){
+            std::cout << str << " is correct!\n";
+        } else {
+            std::cout << str << " is NOT correct!\n";
+        }
+    }
+
+
+
+
+}
+
+// BREAK HERE
+
+
+    // while(true) {
+    //     std::cout << "Select 1 for storing word\n";
+    //     std::cout << "Select 2 for lookup word\n";
+    //     std::cout << "> ";
+
+    //     int option{};
+    //     std::cin >> option;
+    //     switch (option) {
+    //         case 1:
+    //         {
+    //             std::cout << "You chose 1.\n> ";
+    //             std::string str{};
+    //             std::cin >> str;
+    //             bf.store(str);
+    //             break;
+    //         }
+    //         case 2:
+    //         {
+    //             std::cout << "You chose 2.\n> ";
+    //             std::string str{};
+    //             std::cin >> str;
+    //             if(bf.lookup(str)) {
+    //                 std::cout << str << " is correctly spelled!\n";
+    //             } else {
+    //                 std::cout << str << " is NOT correctly spelled!\n";
+    //             }
+    //             break;
+    //         }
+    //     }
+    // }
+
+// int main()
+// {
+//     constexpr int n = 1000000;
+//     constexpr double epsilon = 0.02;
+
+//     constexpr int m = - n * std::log(epsilon) / std::pow(std::log(2),2);
+//     std::cout << "m = " << m << "\n";
+//     std::cout << "m(hex)" << std::hex << m << "\n";
+//     constexpr int numHashFunctions = - std::log(epsilon)/std::log(2);
+
+//     std::cout << "Bitsize = " << m << "\n";
+//     std::cout << "Num hashes= " << numHashFunctions << "\n";
+
+//     auto hash1 = [m](const std::string_view str)
+//                     {
+//                         return std::hash<std::string_view>{}(str) % m;
+//                     };
+//     auto hash2 = [m](const std::string_view str)
+//                     {
+//                         std::string strToReverse = std::string{str};
+//                         std::reverse(strToReverse.begin(), strToReverse.end());
+//                         return std::hash<std::string_view>{}(strToReverse) % m;
+//                     };
+//     auto hash3 = [m](const std::string_view str) {
+//         return std::hash<int>{}(str.length()) % m;
+//     };
+
+//     std::cout << "Hash1: " << hash1("hello") << "\n";
+//     std::cout << "Hash2: " << hash2("hello") << "\n";
+//     std::cout << "Hash3: " << hash3("hello") << "\n";
+
+
+//     std::cout << "Hash1: " << hash1("world") << "\n";
+//     std::cout << "Hash2: " << hash2("world") << "\n";
+//     std::cout << "Hash3: " << hash3("world") << "\n";
+
+//     std::cout << "Hash1: " << hash1("a very long string") << "\n";
+//     std::cout << "Hash2: " << hash2("a very long string") << "\n";
+//     std::cout << "Hash3: " << hash3("a very long string") << "\n";
+
+//     std::bitset<m> bitarray{};
+
+//     bitarray[hash1("world")] = 1;
+//     bitarray[hash2("world")] = 1;
+//     bitarray[hash3("world")] = 1;
+
+
+
+//     auto fetch1 = bitarray[hash1("world")];
+//     auto fetch2 = bitarray[hash2("world")];
+//     auto fetch3 = bitarray[hash3("world")];
+
+//     auto fetch4 = bitarray[hash1("hello")];
+//     auto fetch5 = bitarray[hash2("hello")];
+//     auto fetch6 = bitarray[hash3("")];
+
+//     auto fetch7 = bitarray[hash1("a very long string")];
+//     auto fetch8 = bitarray[hash1("a very long string")];
+//     auto fetch9 = bitarray[hash1("a very long string")];
+
+//     std::cout << "Fetch 1: " << fetch1 << "\n";
+//     std::cout << "Fetch 2: " << fetch2 << "\n";
+//     std::cout << "Fetch 3: " << fetch3 << "\n";
+//     std::cout << "Fetch 4: " << fetch4 << "\n";
+//     std::cout << "Fetch 5: " << fetch5 << "\n";
+//     std::cout << "Fetch 6: " << fetch6 << "\n";
+//     std::cout << "Fetch 7: " << fetch7 << "\n";
+//     std::cout << "Fetch 8: " << fetch8 << "\n";
+//     std::cout << "Fetch 9: " << fetch9 << "\n";
+// }

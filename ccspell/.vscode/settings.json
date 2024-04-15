@@ -1,0 +1,12 @@
+{
+    "workbench.startupEditor": "none",
+    //"C_Cpp.intelliSenseEngine": "Disabled",
+    "clangd.path": "/usr/bin/clangd-17",
+    "clangd.arguments": [
+        "-log=verbose",
+        "-pretty",
+        "--background-index",
+        "--compile-commands-dir=/home/emil/Programming/ccspell/build/"
+    ],
+                    "editor.inlayHints.enabled": "off"
+}

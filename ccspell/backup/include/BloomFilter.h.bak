@@ -1,0 +1,65 @@
+#pragma once
+
+#include <string_view>
+#include <string>
+#include <bitset>
+#include <vector>
+
+namespace bf::detail
+{
+    size_t hash1(const std::string_view str)
+    {
+        return std::hash<std::string_view>{}(str);
+    };
+    size_t hash2(std::string_view str)
+    {
+        std::string strToReverse {str};
+        std::reverse(strToReverse.begin(), strToReverse.end());
+        return std::hash<std::string_view>{}(strToReverse);
+    };
+    size_t hash3(const std::string_view str) {
+        return std::hash<int>{}(str.length());
+    };
+}
+
+namespace bf
+{
+template<typename std::size_t BitSetSize>
+struct BloomFilter
+{
+    std::bitset<BitSetSize> bitarray_;
+
+    int m_{BitSetSize};
+    uint8_t version = 1;
+    int numhashes = 4;
+
+    void store(const std::string_view str) {
+        bitarray_[detail::hash1(str) % m_] = 1;
+        bitarray_[detail::hash2(str) % m_] = 1;
+        bitarray_[detail::hash3(str) % m_] = 1;
+    }
+    bool lookup(const std::string_view str) {
+        auto fetch1 = bitarray_[detail::hash1(str) % m_];
+        auto fetch2 = bitarray_[detail::hash2(str) % m_];
+        auto fetch3 = bitarray_[detail::hash3(str) % m_];
+        return fetch1 && fetch2 && fetch3;
+    }
+};
+
+struct BloomFilterLookUp
+{
+    int m_{};
+    std::vector<bool> bitarray_;
+
+    uint8_t version = 1;
+    int numhashes = 4;
+
+    BloomFilterLookUp(const int numBits, const std::vector<bool>& bitarray) : m_(numBits), bitarray_(bitarray) {}
+    bool lookup(const std::string_view str) {
+        auto fetch1 = bitarray_[detail::hash1(str) % m_];
+        auto fetch2 = bitarray_[detail::hash2(str) % m_];
+        auto fetch3 = bitarray_[detail::hash3(str) & m_];
+        return fetch1 && fetch2 && fetch3;
+    }
+};
+}
