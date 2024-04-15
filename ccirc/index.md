@@ -1,5 +1,8 @@
 # Simple IRC Client
 
+## Screenshot
+![image](irc_screenshot.png)
+
 ## Usage
 * Compile and run ccirc binary.
 * Join channels with command "/join #NAME"
@@ -18,6 +21,3 @@
 * Support messages between users
 * Fuzz testing on input
 
-## Screenshot
-
-![image](irc_screenshot.png)
