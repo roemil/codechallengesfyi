@@ -1,10 +1,16 @@
 # Simple IRC Client
+[Repo](https://github.com/roemil/codechallengesfyi/tree/master/ccirc)
 
 ## Screenshot
 ![image](irc_screenshot.png)
 
+## Compiling
+* Check out repo
+* mkdir build
+* run 'cd build && cmake .. && make'
+
 ## Usage
-* Compile and run ccirc binary.
+* Compile and run the ccirc binary. 
 * Join channels with command "/join #NAME"
 * Leave channels with command "/part #NAME"
 * Type message and send them by pressing enter.
