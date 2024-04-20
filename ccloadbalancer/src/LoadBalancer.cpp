@@ -34,35 +34,41 @@
 
 using servInfo = std::unique_ptr<addrinfo, decltype(&freeaddrinfo)>;
 
-std::unique_ptr<addrinfo, decltype(&freeaddrinfo)> getAddrInfo(const std::string_view port)
+std::unique_ptr<addrinfo, decltype(&freeaddrinfo)>
+getAddrInfo(const std::string_view port)
 {
     struct addrinfo hints;
-    struct addrinfo* servinfo;
+    struct addrinfo *servinfo;
 
     memset(&hints, 0, sizeof hints); // make sure the struct is empty
-    hints.ai_family = AF_UNSPEC; // don't care IPv4 or IPv6
+    hints.ai_family = AF_UNSPEC;     // don't care IPv4 or IPv6
     hints.ai_socktype = SOCK_STREAM; // TCP stream sockets
-    hints.ai_flags = AI_PASSIVE; // fill in my IP for me
+    hints.ai_flags = AI_PASSIVE;     // fill in my IP for me
 
     int status;
-    if ((status = getaddrinfo(NULL, port.data(), &hints, &servinfo)) != 0) {
+    if ((status = getaddrinfo(NULL, port.data(), &hints, &servinfo)) != 0)
+    {
         fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
         exit(1);
     }
-    std::unique_ptr<addrinfo, decltype(&freeaddrinfo)> servinfoPtr(servinfo, freeaddrinfo); // will point to the results
+    std::unique_ptr<addrinfo, decltype(&freeaddrinfo)> servinfoPtr(
+        servinfo, freeaddrinfo); // will point to the results
     return servinfoPtr;
 }
 
-int createListener(const addrinfo& addrInfo)
+int createListener(const addrinfo &addrInfo)
 {
-    int sockfd = socket(addrInfo.ai_family, addrInfo.ai_socktype, addrInfo.ai_protocol);
+    int sockfd =
+        socket(addrInfo.ai_family, addrInfo.ai_socktype, addrInfo.ai_protocol);
     // lose the pesky "Address already in use" error message
     constexpr int yes = 1;
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == -1) {
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == -1)
+    {
         perror("setsockopt");
         exit(1);
     }
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof yes) == -1) {
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof yes) == -1)
+    {
         perror("setsockopt");
         exit(1);
     }
@@ -74,20 +80,25 @@ void logInfo(const std::string_view str)
     std::cout << "[INFO LB] " << str << "\n";
 }
 
-void sendData(int clientFd, const std::vector<char>& buffer)
+void sendData(int clientFd, const std::vector<char> &buffer)
 {
     int res = send(clientFd, buffer.data(), buffer.size(), 0);
-    if (res == -1) {
+    if (res == -1)
+    {
         perror("send");
-    } else if (static_cast<size_t>(res) != buffer.size()) {
+    }
+    else if (static_cast<size_t>(res) != buffer.size())
+    {
         logInfo("All bytes were not sent " + std::to_string(res));
-    } else {
+    }
+    else
+    {
         logInfo("Sent " + std::to_string(res) + " amount of bytes.");
     }
 }
 
 LoadBalancer::LoadBalancer()
-    : healthCheckerThread { [this]() { this->startHealthChecker(); } }
+    : healthCheckerThread{[this]() { this->startHealthChecker(); }}
 {
 }
 
@@ -100,9 +111,9 @@ LoadBalancer::~LoadBalancer()
 
 int LoadBalancer::getNextPortIndex()
 {
-    std::lock_guard<std::mutex> lock { beMutex };
+    std::lock_guard<std::mutex> lock{beMutex};
     int nextPortIndex = 0;
-    std::string nextString { std::to_string(nextPortIndex) };
+    std::string nextString{std::to_string(nextPortIndex)};
     logInfo("Next port " + nextString);
     nextPortIndex = numForwards % backendServers.size();
     ++numForwards;
@@ -113,63 +124,78 @@ std::expected<int, std::string_view> LoadBalancer::getNextPort()
 {
     int nextPortIndex = 0;
     int maxTries = 100;
-    while (!backendServers[nextPortIndex].second && maxTries > 0) {
+    while (!backendServers[nextPortIndex].second && maxTries > 0)
+    {
         --maxTries;
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
         nextPortIndex = getNextPortIndex();
     }
 
-    if (maxTries <= 0) {
-        return std::unexpected { "No backend available" };
+    if (maxTries <= 0)
+    {
+        return std::unexpected{"No backend available"};
     }
 
-    return std::expected<int, std::string_view> { backendServers[nextPortIndex].first };
+    return std::expected<int, std::string_view>{
+        backendServers[nextPortIndex].first};
 }
 
-std::pair<ForwardResult, int> LoadBalancer::forwardToBackend(Client& client, const std::string data, int port)
+std::pair<ForwardResult, int>
+LoadBalancer::forwardToBackend(Client &client, const std::string data, int port)
 {
     std::lock_guard<std::mutex> lock(client.mutex);
     int maxRetries = 3;
-    while (true) {
-        try {
-            TcpSocket backend { port };
+    while (true)
+    {
+        try
+        {
+            TcpSocket backend{port};
 
             logInfo("Forwarding FD: " + std::to_string(backend.getFd()));
             auto sendRes = backend.send(data);
-            if (sendRes < 0) {
-                return { ForwardResult::Failure, client.pollFd.fd };
+            if (sendRes < 0)
+            {
+                return {ForwardResult::Failure, client.pollFd.fd};
             }
             const auto response = backend.recvWithError();
-            if (!response.has_value()) {
-                return { ForwardResult::Failure, client.pollFd.fd };
+            if (!response.has_value())
+            {
+                return {ForwardResult::Failure, client.pollFd.fd};
             }
-            auto sendBackToClientRes = ::send(client.pollFd.fd, response.value().first.data(), response.value().first.size(), 0);
-            if (sendBackToClientRes < 0) {
-                return { ForwardResult::Failure, client.pollFd.fd };
+            auto sendBackToClientRes =
+                ::send(client.pollFd.fd, response.value().first.data(),
+                       response.value().first.size(), 0);
+            if (sendBackToClientRes < 0)
+            {
+                return {ForwardResult::Failure, client.pollFd.fd};
             }
-            return { ForwardResult::Success, client.pollFd.fd };
-
-        } catch (const std::invalid_argument& e) {
+            return {ForwardResult::Success, client.pollFd.fd};
+        }
+        catch (const std::invalid_argument &e)
+        {
             logInfo(e.what());
             maxRetries--;
-            if (maxRetries == 0) {
-                return { ForwardResult::Failure, client.pollFd.fd };
+            if (maxRetries == 0)
+            {
+                return {ForwardResult::Failure, client.pollFd.fd};
             }
         }
     }
     // Unreachable code
-    return { ForwardResult::Failure, client.pollFd.fd };
+    return {ForwardResult::Failure, client.pollFd.fd};
 }
 
 // TODO: std::expected perhaps
-std::optional<std::future<std::pair<ForwardResult, int>>> LoadBalancer::handleClient(Client& client)
+std::optional<std::future<std::pair<ForwardResult, int>>>
+LoadBalancer::handleClient(Client &client)
 {
-    std::array<char, 1024> buf {};
+    std::array<char, 1024> buf{};
     std::lock_guard<std::mutex> lock(client.mutex);
     const auto clientFd = client.pollFd.fd;
 
     int n = recv(clientFd, buf.data(), 1024, 0);
-    if (n < 0) {
+    if (n < 0)
+    {
         logInfo("Received " + std::to_string(n) + " . There is an error");
         logInfo("errno: " + std::to_string(errno));
         // Remove client.
@@ -177,93 +203,112 @@ std::optional<std::future<std::pair<ForwardResult, int>>> LoadBalancer::handleCl
         return std::nullopt;
     }
     logInfo("Received " + std::to_string(n) + " amount of bytes");
-    logInfo("Received msg: " + std::string { buf.data(), static_cast<size_t>(n) });
+    logInfo("Received msg: " + std::string{buf.data(), static_cast<size_t>(n)});
 
     const auto nextPort = getNextPort();
 
-    if (!nextPort.has_value()) {
-        logInfo("Failed to get next port: " + std::string { nextPort.error() });
+    if (!nextPort.has_value())
+    {
+        logInfo("Failed to get next port: " + std::string{nextPort.error()});
         // Remove client.
         client.pollFd.fd = -1;
         return std::nullopt;
     }
 
     // To avoid copies the data could be moved to a unique_ptr/shared_ptr
-    return std::async(forwardToBackend, std::ref(client), std::string { buf.data(), static_cast<size_t>(n) }, nextPort.value());
+    return std::async(forwardToBackend, std::ref(client),
+                      std::string{buf.data(), static_cast<size_t>(n)},
+                      nextPort.value());
 }
 
 int acceptNewClient(int listener)
 {
     struct sockaddr_storage their_addr;
     socklen_t addr_size = sizeof their_addr;
-    int clientFd = accept(listener, (struct sockaddr*)&their_addr, &addr_size);
+    int clientFd = accept(listener, (struct sockaddr *)&their_addr, &addr_size);
     return clientFd;
 }
 
 void LoadBalancer::registerFileDescriptor(int fd, short flags)
 {
-    Client client {};
-    client.pollFd = pollfd { .fd = fd, .events = flags, .revents = 0 };
+    Client client{};
+    client.pollFd = pollfd{.fd = fd, .events = flags, .revents = 0};
     clients_[fd] = client;
     fds_.push_back(client.pollFd);
 }
 
-namespace {
-void purgeInvalidFds(std::vector<pollfd>& clients)
+namespace
+{
+void purgeInvalidFds(std::vector<pollfd> &clients)
 {
 
-    clients.erase(std::remove_if(clients.begin(), clients.end(), [](const pollfd client) {
-        return client.fd == -1;
-    }),
-        clients.end());
+    clients.erase(std::remove_if(clients.begin(), clients.end(),
+                                 [](const pollfd client)
+                                 { return client.fd == -1; }),
+                  clients.end());
 }
-void purgeInvalidClients(std::map<int, Client>& clients)
+void purgeInvalidClients(std::map<int, Client> &clients)
 {
 
     auto itr = clients.begin();
-    while (itr != clients.end()) {
-        if ((*itr).second.pollFd.fd == -1) {
+    while (itr != clients.end())
+    {
+        if ((*itr).second.pollFd.fd == -1)
+        {
             itr = clients.erase(itr);
-        } else {
+        }
+        else
+        {
             itr++;
         }
     }
 }
 
-void markFdsForRemoval(std::vector<pollfd>& fds, const std::map<int, Client>& clients)
+void markFdsForRemoval(std::vector<pollfd> &fds,
+                       const std::map<int, Client> &clients)
 {
-    for (auto& [fd, client] : clients) {
+    for (auto &[fd, client] : clients)
+    {
         std::lock_guard<std::mutex> lock(client.mutex);
-        if (client.pollFd.fd == -1) {
-            auto iter = std::find_if(fds.begin(), fds.end(), [fd](pollfd pfd) {
-                return fd == pfd.fd;
-            });
-            if (iter == fds.end()) {
+        if (client.pollFd.fd == -1)
+        {
+            auto iter = std::find_if(fds.begin(), fds.end(),
+                                     [fd](pollfd pfd) { return fd == pfd.fd; });
+            if (iter == fds.end())
+            {
                 continue;
             }
             iter->fd = -1;
         }
     }
 }
-void purgeFutures(const std::vector<int>& futsToRemove, std::map<int, std::future<std::pair<ForwardResult, int>>>& futures)
+void purgeFutures(
+    const std::vector<int> &futsToRemove,
+    std::map<int, std::future<std::pair<ForwardResult, int>>> &futures)
 {
-    for (auto& futToRemove : futsToRemove) {
+    for (auto &futToRemove : futsToRemove)
+    {
         futures.erase(futToRemove);
     }
 }
-}
+} // namespace
 
 void LoadBalancer::checkAllBackends()
 {
-    std::lock_guard<std::mutex> lock { beMutex };
-    for (auto& port : backendServers) {
+    std::lock_guard<std::mutex> lock{beMutex};
+    for (auto &port : backendServers)
+    {
         // Try all ports, if port succeeds we mark it as alive,
         // otherwise we mark port as dead.
-        try {
-            TcpSocket socket { port.first };
+        try
+        {
+            TcpSocket socket{port.first};
             port.second = true;
-        } catch (const std::invalid_argument& e) {
-            logInfo("Server " + std::to_string(port.first) + " is down. Error: " + e.what());
+        }
+        catch (const std::invalid_argument &e)
+        {
+            logInfo("Server " + std::to_string(port.first) +
+                    " is down. Error: " + e.what());
             port.second = false;
         }
     }
@@ -271,7 +316,8 @@ void LoadBalancer::checkAllBackends()
 
 void LoadBalancer::startHealthChecker()
 {
-    while (true) {
+    while (true)
+    {
         logInfo("Checking backends");
         checkAllBackends();
         using namespace std::chrono_literals;
@@ -287,81 +333,108 @@ void LoadBalancer::start(const std::string_view port)
     logInfo("Listener: " + std::to_string(listener));
 
     int bindResult = bind(listener, servinfo->ai_addr, servinfo->ai_addrlen);
-    if (bindResult == -1) {
+    if (bindResult == -1)
+    {
         perror("bind");
         exit(1);
     }
 
     constexpr int maxClients = 50;
     int err = listen(listener, maxClients);
-    if (err != 0) {
+    if (err != 0)
+    {
         perror("listen");
         exit(1);
     }
 
     registerFileDescriptor(listener, POLL_IN);
 
-    while (true) {
+    while (true)
+    {
         logInfo("Waiting for poll...");
         int pollCount = ::poll(fds_.data(), fds_.size(), -1);
         logInfo("Polled: " + std::to_string(pollCount));
-        if (pollCount == -1) {
+        if (pollCount == -1)
+        {
             perror("poll");
             exit(1);
         }
 
         std::map<int, std::future<std::pair<ForwardResult, int>>> futureResults;
-        std::vector<int> fdsToRegister {};
+        std::vector<int> fdsToRegister{};
 
-        for (const auto& pollFd : fds_) {
-            if (pollFd.revents & POLL_IN) {
-                if (pollFd.fd == listener) {
-                    auto fd = fdsToRegister.emplace_back(acceptNewClient(listener));
+        for (const auto &pollFd : fds_)
+        {
+            if (pollFd.revents & POLL_IN)
+            {
+                if (pollFd.fd == listener)
+                {
+                    auto fd =
+                        fdsToRegister.emplace_back(acceptNewClient(listener));
                     logInfo("Client connected. Fd= " + std::to_string(fd));
-                } else {
+                }
+                else
+                {
                     logInfo("Got pollin for fd=" + std::to_string(pollFd.fd));
                     int n = recv(pollFd.fd, nullptr, 1024, MSG_PEEK);
-                    if (n == 0) {
-                        // client disconnected - mark as invalid
-                        std::lock_guard<std::mutex> lock(clients_.at(pollFd.fd).mutex);
+                    if (n == 0)
+                    {
+                        // client disconnected - mark as
+                        // invalid
+                        std::lock_guard<std::mutex> lock(
+                            clients_.at(pollFd.fd).mutex);
                         clients_.at(pollFd.fd).pollFd.fd = -1;
                         continue;
                     }
                     auto res = handleClient(clients_.at(pollFd.fd));
-                    if (res) {
-                        futureResults.emplace(pollFd.fd, std::move(res.value()));
-                    } else {
+                    if (res)
+                    {
+                        futureResults.emplace(pollFd.fd,
+                                              std::move(res.value()));
+                    }
+                    else
+                    {
                         close(pollFd.fd);
                     }
                 }
-            } else if (pollFd.revents & POLL_OUT) {
+            }
+            else if (pollFd.revents & POLL_OUT)
+            {
                 logInfo("Got revent pollout for: " + std::to_string(pollFd.fd));
-            } else if (pollFd.events & POLL_OUT) {
+            }
+            else if (pollFd.events & POLL_OUT)
+            {
                 logInfo("Got event pollout for: " + std::to_string(pollFd.fd));
             }
         }
 
-        for (const auto fd : fdsToRegister) {
+        for (const auto fd : fdsToRegister)
+        {
             registerFileDescriptor(fd, POLL_IN);
         }
 
-        std::vector<int> futsToRemove {};
+        std::vector<int> futsToRemove{};
 
-        for (auto& [fd, fut] : futureResults) {
-            if (fut.valid()) {
+        for (auto &[fd, fut] : futureResults)
+        {
+            if (fut.valid())
+            {
                 auto res = fut.get();
-                switch (res.first) {
-                case ForwardResult::Failure: {
-                    close(res.second);
-                    clients_[res.second].pollFd.fd = -1;
-                    logInfo("Failure during forward request");
-                    futsToRemove.push_back(res.second);
-                    break;
-                }
-                case ForwardResult::Success: {
-                    futsToRemove.push_back(res.second);
-                    break;
-                }
+                switch (res.first)
+                {
+                    case ForwardResult::Failure:
+                    {
+                        close(res.second);
+                        clients_[res.second].pollFd.fd = -1;
+                        logInfo("Failure during forward request");
+                        futsToRemove.push_back(res.second);
+                        break;
+                    }
+                    case ForwardResult::Success:
+                    {
+                        futsToRemove.push_back(res.second);
+                        break;
+                    }
                 }
             }
         }
