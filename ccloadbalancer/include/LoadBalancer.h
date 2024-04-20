@@ -1,5 +1,6 @@
 #pragma once
 
+#include <expected>
 #include <future>
 #include <map>
 #include <mutex>
@@ -8,7 +9,6 @@
 #include <string_view>
 #include <thread>
 #include <vector>
-#include <expected>
 
 struct Client {
     Client() = default;
@@ -48,8 +48,8 @@ public:
     ~LoadBalancer();
     void start(const std::string_view port);
 
-    static ForwardResult forwardToBackend(Client& client, std::string data, int port);
-    std::optional<std::future<ForwardResult>> handleClient(Client& client);
+    static std::pair<ForwardResult, int> forwardToBackend(Client& client, std::string data, int port);
+    std::optional<std::future<std::pair<ForwardResult, int>>> handleClient(Client& client);
     void registerFileDescriptor(int fd, short flags);
 
     void addBackend(int port);

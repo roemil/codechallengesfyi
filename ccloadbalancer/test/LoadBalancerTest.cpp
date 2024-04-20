@@ -29,10 +29,6 @@ struct LoadBalancerThread {
     {
         lbthread_.detach();
     }
-    ~LoadBalancerThread()
-    {
-        // lbthread_.join();
-    }
     std::thread lbthread_;
 };
 
@@ -44,10 +40,6 @@ struct EchoServerThread {
         } }
     {
         echoServer_.detach();
-    }
-    ~EchoServerThread()
-    {
-        // echoServer_.join();
     }
     std::thread echoServer_;
 };
@@ -79,26 +71,37 @@ TEST_F(LoadBalancerTest, Basic)
     waitForServer(8080);
 
     TestClient client { 8080 };
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
     constexpr auto msg = "hello from client";
     client.socket_.send(msg);
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
     auto res = client.socket_.recv();
-    EXPECT_EQ(std::string { res.data() }, msg);
+    EXPECT_EQ(std::string { res.first.data() }, msg);
+    std::cout << "\nDone\n";
 }
 
-
-// Issue when lb is started first
 TEST_F(LoadBalancerTest, NoBackendsAvailable)
 {
     LoadBalancerThread lb {};
     waitForServer(8080);
 
     TestClient client { 8080 };
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
     constexpr auto msg = "hello from client";
     client.socket_.send(msg);
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    auto res = client.socket_.recvWithError();
+    EXPECT_FALSE(res.has_value());
+    EXPECT_EQ(res.error(), 0);
+}
+
+TEST_F(LoadBalancerTest, ResultNotAvailableAtFirst)
+{
+    EchoServerThread backend { "8081" };
+    waitForServer(8081);
+
+    LoadBalancerThread lb {};
+    waitForServer(8080);
+
+    TestClient client { 8080 };
+    constexpr auto msg = "hello from client";
+    client.socket_.send(msg);
     auto res = client.socket_.recvWithError();
     EXPECT_FALSE(res.has_value());
     EXPECT_EQ(res.error(), 0);

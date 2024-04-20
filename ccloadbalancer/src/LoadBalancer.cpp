@@ -2,11 +2,13 @@
 
 #include <algorithm>
 #include <array>
+#include <cerrno>
 #include <chrono>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <expected>
 #include <future>
 #include <iostream>
 #include <iterator>
@@ -23,7 +25,6 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <vector>
-#include <expected>
 
 #include <thread>
 
@@ -58,6 +59,10 @@ int createListener(const addrinfo& addrInfo)
     // lose the pesky "Address already in use" error message
     constexpr int yes = 1;
     if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == -1) {
+        perror("setsockopt");
+        exit(1);
+    }
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof yes) == -1) {
         perror("setsockopt");
         exit(1);
     }
@@ -108,23 +113,20 @@ std::expected<int, std::string_view> LoadBalancer::getNextPort()
 {
     int nextPortIndex = 0;
     int maxTries = 100;
-    while(!backendServers[nextPortIndex].second && maxTries > 0)
-    {
+    while (!backendServers[nextPortIndex].second && maxTries > 0) {
         --maxTries;
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
         nextPortIndex = getNextPortIndex();
     }
 
-    if(maxTries <= 0)
-    {
-        return std::unexpected{"No backend available"};
+    if (maxTries <= 0) {
+        return std::unexpected { "No backend available" };
     }
 
-    // TODO: Fix implicit copy
-    return backendServers[nextPortIndex].first;
+    return std::expected<int, std::string_view> { backendServers[nextPortIndex].first };
 }
 
-ForwardResult LoadBalancer::forwardToBackend(Client& client, const std::string data, int port)
+std::pair<ForwardResult, int> LoadBalancer::forwardToBackend(Client& client, const std::string data, int port)
 {
     std::lock_guard<std::mutex> lock(client.mutex);
     int maxRetries = 3;
@@ -135,32 +137,32 @@ ForwardResult LoadBalancer::forwardToBackend(Client& client, const std::string d
             logInfo("Forwarding FD: " + std::to_string(backend.getFd()));
             auto sendRes = backend.send(data);
             if (sendRes < 0) {
-                client.pollFd.fd = -1;
-                return ForwardResult::Failure;
+                return { ForwardResult::Failure, client.pollFd.fd };
             }
-            auto response = backend.recv();
-            auto sendBackToClientRes = ::send(client.pollFd.fd, response.data(), response.size(), 0);
+            const auto response = backend.recvWithError();
+            if (!response.has_value()) {
+                return { ForwardResult::Failure, client.pollFd.fd };
+            }
+            auto sendBackToClientRes = ::send(client.pollFd.fd, response.value().first.data(), response.value().first.size(), 0);
             if (sendBackToClientRes < 0) {
-                client.pollFd.fd = -1;
-                return ForwardResult::Failure;
+                return { ForwardResult::Failure, client.pollFd.fd };
             }
-            return ForwardResult::Success;
+            return { ForwardResult::Success, client.pollFd.fd };
 
         } catch (const std::invalid_argument& e) {
             logInfo(e.what());
             maxRetries--;
             if (maxRetries == 0) {
-                client.pollFd.fd = -1;
-                return ForwardResult::Failure;
+                return { ForwardResult::Failure, client.pollFd.fd };
             }
         }
     }
     // Unreachable code
-    return ForwardResult::Failure;
+    return { ForwardResult::Failure, client.pollFd.fd };
 }
 
 // TODO: std::expected perhaps
-std::optional<std::future<ForwardResult>> LoadBalancer::handleClient(Client& client)
+std::optional<std::future<std::pair<ForwardResult, int>>> LoadBalancer::handleClient(Client& client)
 {
     std::array<char, 1024> buf {};
     std::lock_guard<std::mutex> lock(client.mutex);
@@ -179,9 +181,8 @@ std::optional<std::future<ForwardResult>> LoadBalancer::handleClient(Client& cli
 
     const auto nextPort = getNextPort();
 
-    if(!nextPort.has_value())
-    {
-        logInfo("Failed to get next port: " + std::string{nextPort.error()});
+    if (!nextPort.has_value()) {
+        logInfo("Failed to get next port: " + std::string { nextPort.error() });
         // Remove client.
         client.pollFd.fd = -1;
         return std::nullopt;
@@ -244,6 +245,12 @@ void markFdsForRemoval(std::vector<pollfd>& fds, const std::map<int, Client>& cl
         }
     }
 }
+void purgeFutures(const std::vector<int>& futsToRemove, std::map<int, std::future<std::pair<ForwardResult, int>>>& futures)
+{
+    for (auto& futToRemove : futsToRemove) {
+        futures.erase(futToRemove);
+    }
+}
 }
 
 void LoadBalancer::checkAllBackends()
@@ -303,7 +310,7 @@ void LoadBalancer::start(const std::string_view port)
             exit(1);
         }
 
-        std::vector<std::future<ForwardResult>> futureResults;
+        std::map<int, std::future<std::pair<ForwardResult, int>>> futureResults;
         std::vector<int> fdsToRegister {};
 
         for (const auto& pollFd : fds_) {
@@ -322,7 +329,7 @@ void LoadBalancer::start(const std::string_view port)
                     }
                     auto res = handleClient(clients_.at(pollFd.fd));
                     if (res) {
-                        futureResults.push_back(std::move(res.value()));
+                        futureResults.emplace(pollFd.fd, std::move(res.value()));
                     } else {
                         close(pollFd.fd);
                     }
@@ -338,20 +345,31 @@ void LoadBalancer::start(const std::string_view port)
             registerFileDescriptor(fd, POLL_IN);
         }
 
-        for (auto& fut : futureResults) {
-            if (!fut.valid()) {
-                fut.wait();
-            }
-            auto res = fut.get();
-            if (res == ForwardResult::Failure) {
-                // TODO: Close client connection here
-                logInfo("Failed to forward request");
+        std::vector<int> futsToRemove {};
+
+        for (auto& [fd, fut] : futureResults) {
+            if (fut.valid()) {
+                auto res = fut.get();
+                switch (res.first) {
+                case ForwardResult::Failure: {
+                    close(res.second);
+                    clients_[res.second].pollFd.fd = -1;
+                    logInfo("Failure during forward request");
+                    futsToRemove.push_back(res.second);
+                    break;
+                }
+                case ForwardResult::Success: {
+                    futsToRemove.push_back(res.second);
+                    break;
+                }
+                }
             }
         }
 
         markFdsForRemoval(fds_, clients_);
         purgeInvalidFds(fds_);
         purgeInvalidClients(clients_);
+        purgeFutures(futsToRemove, futureResults);
     }
 }
 

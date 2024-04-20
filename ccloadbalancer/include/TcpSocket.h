@@ -1,8 +1,8 @@
 #pragma once
 
 #include <array>
-#include <string_view>
 #include <expected>
+#include <string_view>
 
 class TcpSocket {
 public:
@@ -11,8 +11,11 @@ public:
     ~TcpSocket();
 
     int send(std::string_view data) const noexcept;
-    std::array<char, 1024> recv();
-    std::expected<std::array<char, 1024>, int> recvWithError();
+
+    using RecvValue = std::pair<std::array<char, 1024>, int>;
+    RecvValue recv();
+    std::expected<RecvValue, int> recvWithError();
+    std::expected<RecvValue, int> recvNonBlocking();
 
     int getFd() const noexcept;
 
