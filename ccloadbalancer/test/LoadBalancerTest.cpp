@@ -75,7 +75,6 @@ TEST_F(LoadBalancerTest, Basic)
     client.socket_.send(msg);
     auto res = client.socket_.recv();
     EXPECT_EQ(std::string { res.first.data() }, msg);
-    std::cout << "\nDone\n";
 }
 
 TEST_F(LoadBalancerTest, NoBackendsAvailable)
@@ -93,16 +92,19 @@ TEST_F(LoadBalancerTest, NoBackendsAvailable)
 
 TEST_F(LoadBalancerTest, ResultNotAvailableAtFirst)
 {
-    EchoServerThread backend { "8081" };
-    waitForServer(8081);
-
     LoadBalancerThread lb {};
     waitForServer(8080);
 
     TestClient client { 8080 };
     constexpr auto msg = "hello from client";
     client.socket_.send(msg);
-    auto res = client.socket_.recvWithError();
-    EXPECT_FALSE(res.has_value());
-    EXPECT_EQ(res.error(), 0);
+    auto dataNotReady = client.socket_.recvNonBlocking();
+    EXPECT_FALSE(dataNotReady.has_value());
+
+    EchoServerThread backend { "8081" };
+    waitForServer(8081);
+
+    auto res = client.socket_.recv();
+
+    EXPECT_EQ(std::string { res.first.data() }, msg);
 }
