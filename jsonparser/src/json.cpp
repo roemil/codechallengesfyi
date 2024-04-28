@@ -2,56 +2,123 @@
 
 #include "lexer.h"
 
-#include <cstdio>
+#include <charconv>
 #include <gtest/gtest.h>
-#include <iterator>
-#include <memory>
 #include <stdexcept>
 #include <string>
-#include <fstream>
-#include <iostream>
-#include <stack>
-#include <memory>
 #include <vector>
 
 namespace json
 {
-    bool isValidString(const std::string& str) noexcept
+    bool isValidString(const std::string_view str) noexcept
     {
         const auto first = str.find('"');
         const auto second = str.find_last_of('"');
-        if(first == second || first == std::string::npos || second == std::string::npos)
+        if(first == second || first == std::string_view::npos || second == std::string_view::npos)
         {
             return false;
         }
         return true;
     }
-    unsigned verifyKvPair(const std::vector<std::string>& tokens, unsigned index)
+
+    int toNumber(const std::string_view numberString)
     {
-        const auto startIndex = index;
-        const auto& token = tokens[++index];
-        if(!isValidString(token))
-        {
-            throw std::invalid_argument{"Key is not a string"};
+        int value{};
+        auto [ptr, ec] = std::from_chars(numberString.data(), numberString.data() + numberString.size(), value);
+        if(ec != std::errc()){
+            throw std::invalid_argument{"Not a number: " + std::string{numberString}};
         }
-        const auto separator = tokens[++index];
+        
+        return value;
+    }
+
+    std::pair<ParseResult, unsigned> parser::parseValue(const std::vector<std::string>& tokens, unsigned index, const std::string_view value_raw)
+    {
+        ParseResult value{};
+        switch (value_raw[0])
+        {
+            case 't':
+            {
+                value.jsonValue = JsonElement::True;
+                ++index;
+                break;
+            }
+            case 'f':
+            {
+                value.jsonValue = JsonElement::False;
+                ++index;
+                break;
+            }
+            case 'n':
+            {
+                value.jsonValue = JsonElement::Null;
+                ++index;
+                break;
+            }
+            case '\"':
+            {
+                value.val_ = value_raw;
+                ++index;
+                break;
+            }
+            case '{':
+            {
+                const auto object = parseObject(tokens, index);
+                index = object.second;
+                value = object.first;
+                break;
+            }
+            case '[':
+            {
+                const auto parsedArray = parseArray(tokens, index);
+                value = parsedArray.first;
+                index = parsedArray.second;
+                break;
+            }
+
+            default:
+            {
+                if(Lexer::isNumber(std::string{value_raw}))
+                {
+                    //value.integer = toNumber(value_raw);
+                    value.integer = value_raw;
+                    ++index;
+                    break;
+                }
+                throw std::invalid_argument{"Unexpected value: " + std::string{value_raw} + "!"};
+            }
+        }
+        return {value, index};
+    }
+
+    std::tuple<std::string, ParseResult, unsigned> parser::parseKeyValuePair(const std::vector<std::string>& tokens, unsigned index)
+    {
+        const std::string_view key = tokens[index];
+        if(!isValidString(key))
+        {
+            throw std::invalid_argument{"Key is not a string: " + std::string{key}};
+        }
+
+        const std::string_view separator = tokens[++index];
         if(separator != ":")
         {
-            throw std::invalid_argument{"No key/value combo. Got: " + separator};
+            throw std::invalid_argument{"No key/value combo. Got: " + std::string{separator}};
         }
-        ++index;
-        return index - startIndex;
+        const std::string_view value_raw = tokens[++index];
+        const auto parsedValue = parseValue(tokens, index, value_raw);
+        ParseResult value = parsedValue.first;
+        return {std::string{key}, value, parsedValue.second};
+
     }
-    unsigned parser::validateArray(const std::vector<std::string>& tokens, unsigned index)
+    std::pair<ParseResult, unsigned> parser::parseArray(const std::vector<std::string>& tokens, unsigned index)
     {
         ++depth;
         if(depth >= 20)
         {
             throw std::invalid_argument{"Too deep"};
         }
-        // TODO: Should only start with {
-        const auto startingIndex = index;
-        if(tokens[index] == "," || tokens[index] == "[")
+
+        if(tokens[index] == "[")
         {
             ++index;
         }
@@ -65,86 +132,51 @@ namespace json
         }
         if(tokens[index] == "]")
         {
-            return (++index - startingIndex);
+            return {ParseResult{}, ++index};
         }
-        while(index < tokens.size() && tokens[index] != "]")
+        ParseResult result{};
+        while(tokens[index] != "]")
         {
-            const auto& token = tokens[index];
-            switch (token[0])
+            const std::string_view token = tokens[index];
+            if(token == ",")
             {
-                case '{':
-                {
-                    index += validateObject(tokens, index);
-                    break;
+                if(index + 1 < tokens.size() && tokens[index+1] == "]"){
+                    throw std::invalid_argument{"Missing value in array"};
                 }
-                case '[':
-                {
-                    index += validateArray(tokens, index);
-                }
-                case '"':
-                {
-                    ++index; // Normal value - validated in lexer.
-                    break;
-                }
-                case ',':
-                {
-                    if(tokens[index+1] == "]")
-                    {
-                        throw std::invalid_argument{"Trailing comma in array"};
-                    }
-                    ++index;
-                    break;
-                }
-                case 't':
-                case 'f':
-                case 'n':
-                {
-                    ++index;
-                    break;
-                }
-                default:
-                    if(index >= tokens.size())
-                    {
-                        return (index - startingIndex);
-                    }
-                    else if(Lexer::isNumber(tokens[index]))
-                    {
-                        ++index;
-                        continue;
-                    }
-                    else
-                    {
-                        throw std::invalid_argument{"Invalid value in arr: " + token};
-                    }
+                ++index;
+                continue;
+            }
+            const auto parsedValue = parseValue(tokens, index, token);
+            result.array_.push_back(parsedValue.first);
+            index = parsedValue.second;
+            if(index > tokens.size())
+            {
+                throw std::invalid_argument{"Out of bounds when parsing array"};
             }
         }
-
-        ++index; // Consume last bracket
         --depth;
-        return index-startingIndex;
+        ++index; // Consume last bracket
+        
+        return {result, index};
 
     }
-    unsigned parser::validateObject(const std::vector<std::string>& tokens, unsigned index)
+    std::pair<ParseResult, unsigned> parser::parseObject(const std::vector<std::string>& tokens, unsigned index)
     {
-        const auto startingIndex = index;
-        // TODO: Should only start with {
-        if(tokens[index] == "," || tokens[index] == "{")
+        if(tokens[index] == "{")
         {
             ++index;
         }
         else
         {
-            throw std::invalid_argument{"Object must begin with { or ,"};
+            throw std::invalid_argument{"Object must begin with {"};
         }
         if(tokens[index] == "}")
         {
-            ++index;
-            return index - startingIndex;
+            //++index;
+            return {ParseResult{}, ++index};
         }
-
-        // TODO: Refactor to use verifyKvPair
-        const auto& token = tokens[index];
-        if(!isValidString(token))
+        const std::string_view key = tokens[index];
+        if(!isValidString(key))
         {
             throw std::invalid_argument{"Key is not a string"};
         }
@@ -153,73 +185,36 @@ namespace json
         {
             throw std::invalid_argument{"No key/value combo. Got: " + separator};
         }
+
         ++index;
+        ParseResult result{};
         while(tokens[index] != "}")
         {
-            const auto value = tokens[index];
- 
-            switch(value[0])
-            {
-                case '{':
-                {
-                    index += validateObject(tokens, index);   
-                    break;
-                }
-                case '[':
-                {
-                    index += validateArray(tokens, index);
-                    break;
-                }
-                case ',':
-                {
-                    if(tokens[index+1] == "]" || tokens[index+1] == "}")
-                    {
-                        throw std::invalid_argument{"Trailing comma"};
-                    }
-                    else if(tokens[index+1] == "{")
-                    {
-                        index += validateObject(tokens, index);
-                        break;
-                    }
-                    index += verifyKvPair(tokens, index);
-                    break;
-                }
-                case '"':
-                case 't':
-                case 'f':
-                case 'n':
-                    {
-                        ++index;
-                        break;
-                    }
-                default:
-                    if(Lexer::isNumber(value))
-                    {
-                        ++index;
-                        continue;
-                    }
-                    else
-                    {
-                            throw std::invalid_argument{"Invalid value: " + value };
-                    }
+            const std::string_view value = tokens[index];
+            if(value.starts_with(",")){
+                const auto parsedValue = parseKeyValuePair(tokens, index+1);
+                result.map_[std::get<0>(parsedValue)] = std::get<1>(parsedValue);
+                index = std::get<2>(parsedValue);
             }
-            assert(index < tokens.size());
+            else
+            {
+                const auto parsedValue = parseValue(tokens, index, value);
+                result.map_[std::string{key}] = parsedValue.first;
+                index = parsedValue.second;
+            }
+            if(index > tokens.size()) 
+            {
+                throw std::invalid_argument{"Trying to access token out of bounds"};    
+            }
+        }
 
-        }
-        if(tokens[index] == "}")
-        {
-            ++index;
-        }
-        else {
-            throw std::invalid_argument{"Expected closing }"};
-        }
-        return (index - startingIndex);
+        return {result, ++index}; // Consume last bracket
     }
 }
 
 namespace json
 {
-    void parser::isValidJson(const std::string& filename)
+    ParseResult parser::parse(const std::string& filename)
     {
         Lexer lexer{filename};
 
@@ -237,25 +232,26 @@ namespace json
         {
             throw std::invalid_argument{"JSON must end as object or array"};
         }
-        for(unsigned index = 0; index < tokens->size(); ++index)
-        {
-            const auto& token = tokens->at(index);
-            if(token == "{")
+        ParseResult parsedData{};
+        const auto& token = tokens->at(0);
+        if(token == "{"){
+            const auto parsedJson = parseObject(*tokens, 0);
+            if(parsedJson.second < tokens->size())
             {
-                index += validateObject(*tokens, index);
+                throw std::invalid_argument{"Unparsed tokens: " + tokens->at(parsedJson.second)};
             }
-            else if(token == "[")
-            {
-                index += validateArray(*tokens, index);
-            }
-            else if(token == ",")
-            {
-                index += validateObject(*tokens, index);
-            }
-            if((index < tokens->size() && tokens->at(index) == "]"))
-            {
-                throw std::invalid_argument{"Trailing ]"};
-            }
+            return parsedJson.first;
         }
+        else if(token == "[")
+        {
+            const auto parsedJson = parseArray(*tokens, 0);
+            if(parsedJson.second < tokens->size())
+            {
+                throw std::invalid_argument{"Unparsed tokens: " + tokens->at(parsedJson.second)};
+            }
+            return parsedJson.first;
+        }
+        
+        throw std::invalid_argument{"JSON must start with { or ["};
     }
-}   
+}

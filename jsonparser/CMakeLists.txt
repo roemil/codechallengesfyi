@@ -25,9 +25,10 @@ add_executable(
     src/lexer.cpp
     test/json_SUITE.cpp
 )
+
 target_link_libraries(
     json_SUITE gtest_main
 )
- 
+
 include(GoogleTest)
 gtest_discover_tests(json_SUITE)

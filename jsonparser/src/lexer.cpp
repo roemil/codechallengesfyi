@@ -1,6 +1,5 @@
 #include "lexer.h"
 
-#include <_ctype.h>
 #include <algorithm>
 #include <stdexcept>
 #include <string>
