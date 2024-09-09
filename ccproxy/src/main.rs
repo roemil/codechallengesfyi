@@ -106,6 +106,7 @@ async fn forward_proxy(
         }
     };
 
+    // TODO: Add proper headers
     let response = Response::new(b.unwrap());
     info!(
         "Client: {}, Request URL: {}, StatusCode: {}",
