@@ -64,9 +64,10 @@ async fn forward_proxy(
     if *req.method() != Method::GET {
         let resp = create_response("".to_string(), StatusCode::BAD_REQUEST);
         error!(
-            "Error: Not a Get request. Client: {}, Request URL: {}, StatusCode: {}",
+            "Error: Not a Get request. Client: {}, Request URL: {}, Method: {} , StatusCode: {}",
             remote.to_string(),
             &req.uri(),
+            req.method(),
             resp.status()
         );
         return Ok(resp);
