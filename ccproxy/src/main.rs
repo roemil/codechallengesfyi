@@ -3,11 +3,10 @@ use std::fs;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use http_body_util::Full;
-use hyper::body::Bytes;
 use hyper::server::conn::http1;
 use hyper::{Method, Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
+use log::{error, info};
 use tokio::net::TcpListener;
 
 #[derive(Debug, Clone)]
@@ -38,55 +37,88 @@ where
     }
 }
 
+fn create_response<T>(body: T, http_code : StatusCode) -> Response<T> {
+    let response = Response::new(body);
+        let (mut parts, body) = response.into_parts();
+
+        parts.status = http_code;
+        Response::from_parts(parts, body)
+}
+
 async fn forward_proxy(
     remote: SocketAddr,
     req: Request<hyper::body::Incoming>,
     rules: Arc<Vec<String>>,
-) -> Result<Response<Full<Bytes>>, Infallible> {
+) -> Result<Response<String>, Infallible> {
     let headers = req.headers();
     if !headers.contains_key("proxy-connection") {
-        return Ok(Response::new(Full::new(Bytes::from(
-            StatusCode::BAD_REQUEST.as_str(),
-        ))));
+        let resp = create_response("".to_string(), StatusCode::BAD_REQUEST);
+        error!(
+            "Error: Missing proxy-connection. Client: {}, Request URL: {}, StatusCode: {}",
+            remote.to_string(),
+            &req.uri(),
+            resp.status()
+        );
+        return Ok(resp);
     }
     if *req.method() != Method::GET {
-        return Ok(Response::new(Full::new(Bytes::from(
-            StatusCode::BAD_REQUEST.as_str(),
-        ))));
+        let resp = create_response("".to_string(), StatusCode::BAD_REQUEST);
+        error!(
+            "Error: Not a Get request. Client: {}, Request URL: {}, StatusCode: {}",
+            remote.to_string(),
+            &req.uri(),
+            resp.status()
+        );
+        return Ok(resp);
     }
 
     if rules.contains(&req.uri().to_string()) {
-        return Ok(Response::new(Full::new(Bytes::from(
-            StatusCode::FORBIDDEN.as_str(),
-        ))));
+        let resp = create_response("".to_string(), StatusCode::FORBIDDEN);
+        error!(
+            "Error: Forbidden URI. Client: {}, Request URL: {}, StatusCode: {}",
+            remote.to_string(),
+            &req.uri(),
+            resp.status()
+        );
+        return Ok(resp);
     }
 
     let c = reqwest::Client::new();
     let r = c
-        .get(req.uri().to_string())
+        .get(&req.uri().to_string())
         .header("User-Agent", headers.get("User-Agent").unwrap())
         .header("X-Forwarded-For", remote.to_string());
     // TODO: Make sure it is keep-alive'd
-    let req = r.build().expect("Failed to build request");
+    let forward_req = r.build().expect("Failed to build request");
 
-    let b = match c.execute(req).await {
-        Ok(r) => r.bytes().await,
+    let b = match c.execute(forward_req).await {
+        Ok(r) => r.text().await,
         Err(e) => {
             eprintln!("Failed to forward request. Error: {}", e);
-            return Ok(Response::new(Full::new(Bytes::from(
-                StatusCode::BAD_GATEWAY.as_str(),
-            ))));
+            let resp = create_response("".to_string(), StatusCode::BAD_GATEWAY);
+            error!(
+                "Failed to forward request. Error: {}, Client: {}, StatusCode: {}",
+                e,
+                remote.to_string(),
+                resp.status()
+            );
+            return Ok(resp);
         }
     };
 
-    let response = Response::new(Full::new(b.unwrap()));
-    println!("Response: {:?}", response);
+    let response = Response::new(b.unwrap());
+    info!(
+        "Client: {}, Request URL: {}, StatusCode: {}",
+        remote.to_string(),
+        req.uri(),
+        response.status()
+    );
     Ok(response)
 }
 
 fn parse_blacklist(path: &str) -> Vec<String> {
     fs::read_to_string(path)
-        .expect("Should have been able to read the file")
+        .expect("File must exist!")
         .lines()
         .into_iter()
         .map(|line| line.to_string())
@@ -96,6 +128,7 @@ fn parse_blacklist(path: &str) -> Vec<String> {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let addr = SocketAddr::from(([127, 0, 0, 1], 8089));
+    log4rs::init_file("log_config.yaml", Default::default()).unwrap();
 
     let listener = TcpListener::bind(addr).await?;
 
@@ -110,10 +143,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             let svc = hyper::service::service_fn(move |req| {
                 forward_proxy(remote, req, blacklist_c.clone())
             });
-            if let Err(err) = http1::Builder::new()
-                .serve_connection(io, svc)
-                .await
-            {
+            if let Err(err) = http1::Builder::new().serve_connection(io, svc).await {
                 eprintln!("Error serving connection: {:?}", err);
             }
         });
