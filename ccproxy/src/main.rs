@@ -1,7 +1,7 @@
 use std::convert::Infallible;
+use std::fs;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::fs;
 
 use http_body_util::Full;
 use hyper::body::Bytes;
@@ -43,16 +43,16 @@ async fn forward_proxy(
     req: Request<hyper::body::Incoming>,
     rules: Arc<Vec<String>>,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
-    println!("{:?}", req);
-    println!("Remote: {:?}", remote);
     let headers = req.headers();
     if !headers.contains_key("proxy-connection") {
         return Ok(Response::new(Full::new(Bytes::from(
-            "Not a proxy request!",
+            StatusCode::BAD_REQUEST.as_str(),
         ))));
     }
     if *req.method() != Method::GET {
-        return Ok(Response::new(Full::new(Bytes::from("Not a GET request!"))));
+        return Ok(Response::new(Full::new(Bytes::from(
+            StatusCode::BAD_REQUEST.as_str(),
+        ))));
     }
 
     if rules.contains(&req.uri().to_string()) {
@@ -73,8 +73,9 @@ async fn forward_proxy(
         Ok(r) => r.bytes().await,
         Err(e) => {
             eprintln!("Failed to forward request. Error: {}", e);
-            // TODO: Return proper error codes
-            Ok(Bytes::from("Failed to forward req"))
+            return Ok(Response::new(Full::new(Bytes::from(
+                StatusCode::BAD_GATEWAY.as_str(),
+            ))));
         }
     };
 
@@ -83,11 +84,9 @@ async fn forward_proxy(
     Ok(response)
 }
 
-fn parse_blacklist() -> Vec<String> {
-    let contents =
-        fs::read_to_string("src/blacklist.txt").expect("Should have been able to read the file");
-    println!("{}", contents);
-    contents
+fn parse_blacklist(path: &str) -> Vec<String> {
+    fs::read_to_string(path)
+        .expect("Should have been able to read the file")
         .lines()
         .into_iter()
         .map(|line| line.to_string())
@@ -100,24 +99,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let listener = TcpListener::bind(addr).await?;
 
-    let blacklist = Arc::new(parse_blacklist());
+    let blacklist = Arc::new(parse_blacklist("src/blacklist.txt"));
 
     loop {
         let (stream, _) = listener.accept().await?;
-        
-        // Use an adapter to access something implementing `tokio::io` traits as if they implement
-        // `hyper::rt` IO traits.
         let io = TokioIo::new(stream);
         let blacklist_c = blacklist.clone();
-        // Spawn a tokio task to serve multiple connections concurrently
         tokio::task::spawn(async move {
             let remote = io.inner().peer_addr().expect("Remote address must exist");
-            // Finally, we bind the incoming connection to our `hello` service
             let svc = hyper::service::service_fn(move |req| {
-                forward_proxy(remote, req, blacklist_c.clone() )
+                forward_proxy(remote, req, blacklist_c.clone())
             });
             if let Err(err) = http1::Builder::new()
-                // `service_fn` converts our function in a `Service`
                 .serve_connection(io, svc)
                 .await
             {
