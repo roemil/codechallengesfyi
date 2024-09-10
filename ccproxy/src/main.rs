@@ -22,7 +22,7 @@ fn create_response(http_code: StatusCode) -> Response<BoxBody<Bytes, Error>> {
     response
 }
 
-async fn forward_proxy(
+async fn proxy(
     local_socket: SocketAddr,
     req: Request<hyper::body::Incoming>,
     rules: Arc<Vec<String>>,
@@ -152,7 +152,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         tokio::task::spawn(async move {
             let remote = io.inner().peer_addr().expect("Remote address must exist");
             let svc = hyper::service::service_fn(move |req| {
-                forward_proxy(remote, req, blacklist_c.clone())
+                proxy(remote, req, blacklist_c.clone())
             });
             if let Err(err) = http1::Builder::new()
                 .preserve_header_case(true)
