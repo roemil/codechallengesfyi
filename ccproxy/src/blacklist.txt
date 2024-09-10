@@ -1,2 +1,2 @@
-http://facebook.com/
-http://github.com/
+facebook.com
+github.com
