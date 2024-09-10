@@ -1,8 +1,8 @@
+use bytes::Bytes;
 use std::convert::Infallible;
 use std::fs;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use bytes::Bytes;
 
 use http_body_util::combinators::BoxBody;
 use http_body_util::BodyExt;
@@ -13,37 +13,11 @@ use hyper_util::rt::TokioIo;
 use log::error;
 use tokio::net::TcpListener;
 
-#[derive(Debug, Clone)]
-pub struct Proxy<S> {
-    inner: S,
-}
-impl<S> Proxy<S> {
-    pub fn new(inner: S) -> Self {
-        Proxy { inner }
-    }
-}
-type Req = Request<hyper::body::Incoming>;
-
-impl<S> hyper::service::Service<Req> for Proxy<S>
-where
-    S: hyper::service::Service<Req>,
-{
-    type Response = S::Response;
-    type Error = S::Error;
-    type Future = S::Future;
-    fn call(&self, req: Req) -> Self::Future {
-        println!(
-            "processing request from: {} {}",
-            req.method(),
-            req.uri().path()
-        );
-        self.inner.call(req)
-    }
-}
-
 fn create_response(http_code: StatusCode) -> Response<BoxBody<Bytes, Error>> {
     let body = Bytes::from(http_code.as_str().to_string());
-    let mut response = Response::new(BoxBody::<Bytes, Error>::new(http_body_util::Full::new(body).map_err(|e| match e {})));
+    let mut response = Response::new(BoxBody::<Bytes, Error>::new(
+        http_body_util::Full::new(body).map_err(|e| match e {}),
+    ));
     *response.status_mut() = http_code;
     response
 }
@@ -53,11 +27,6 @@ async fn forward_proxy(
     req: Request<hyper::body::Incoming>,
     rules: Arc<Vec<String>>,
 ) -> Result<Response<BoxBody<Bytes, Error>>, Infallible> {
-    println!("Req {:?}", req);
-    println!("Host {:?}", req.uri().host());
-    println!("Port {:?}", req.uri().port());
-    println!("Authority {:?}", req.uri().authority());
-    println!("Remote {}", local_socket);
     let headers = req.headers();
     if !headers.contains_key("proxy-connection") {
         let resp = create_response(StatusCode::BAD_REQUEST);
@@ -69,45 +38,59 @@ async fn forward_proxy(
         );
         return Ok(resp);
     }
-    if *req.method() != Method::GET && *req.method() != Method::CONNECT {
-        let resp = create_response(StatusCode::BAD_REQUEST);
+
+    if is_on_blacklist(rules, &req) {
+        let resp = create_response(StatusCode::FORBIDDEN);
         error!(
-            "Error: Not a Get or Connect request. Client: {}, Request URL: {}, Method: {} , StatusCode: {}",
+            "Error: Forbidden URI. Client: {}, Request URL: {}, StatusCode: {}",
             local_socket.to_string(),
             &req.uri(),
-            req.method(),
             resp.status()
         );
         return Ok(resp);
     }
 
-    if let Some(response) = is_on_blacklist(rules, &req, local_socket) {
-        return Ok(response);
+    match *req.method() {
+        Method::GET => forward_request(req).await,
+        Method::CONNECT => handle_with_tls(req),
+        _ => {
+            let resp = create_response(StatusCode::BAD_REQUEST);
+            error!(
+                "Error: Not a Get or Connect request. Client: {}, Request URL: {}, Method: {} , StatusCode: {}",
+                local_socket.to_string(),
+                &req.uri(),
+                req.method(),
+                resp.status()
+            );
+            Ok(resp)
+        }
     }
-
-    if *req.method() == Method::CONNECT {
-        let addr = req.uri().authority().unwrap().to_string();
-        tokio::task::spawn(async move {
-            match hyper::upgrade::on(req).await {
-                Ok(upgraded) => {
-                    if let Err(e) = tunnel(upgraded, addr).await {
-                        eprintln!("server io error: {}", e);
-                    };
-                }
-                Err(e) => eprintln!("upgrade error: {}", e),
-            }
-        });
-        // Must return a empty body to client then the connection will be upgraded.
-        return Ok(Response::default());
-    }
-
-    Ok(forward_request(req).await?)
 }
 
-async fn forward_request(req: Request<hyper::body::Incoming>) -> Result<Response<BoxBody<Bytes, Error>>, Infallible> {
-    let addr = req.uri().host().unwrap();
+fn handle_with_tls(
+    req: Request<hyper::body::Incoming>,
+) -> Result<Response<BoxBody<Bytes, Error>>, Infallible> {
+    let addr = req.uri().authority().unwrap().to_string();
+    tokio::task::spawn(async move {
+        match hyper::upgrade::on(req).await {
+            Ok(upgraded) => {
+                if let Err(e) = tunnel(upgraded, addr).await {
+                    eprintln!("server io error: {}", e);
+                };
+            }
+            Err(e) => eprintln!("upgrade error: {}", e),
+        }
+    });
+    // Must return a empty body to client then the connection will be upgraded.
+    return Ok(Response::default());
+}
+
+async fn forward_request(
+    req: Request<hyper::body::Incoming>,
+) -> Result<Response<BoxBody<Bytes, Error>>, Infallible> {
+    let addr = req.uri().host().expect("Host most always be present");
     let port = req.uri().port_u16().unwrap_or(80);
-    let stream = tokio::net::TcpStream::connect((addr,port))
+    let stream = tokio::net::TcpStream::connect((addr, port))
         .await
         .expect("Remote not available");
     let io = TokioIo::new(stream);
@@ -128,20 +111,9 @@ async fn forward_request(req: Request<hyper::body::Incoming>) -> Result<Response
 
 fn is_on_blacklist(
     rules: Arc<Vec<String>>,
-    req: &Request<hyper::body::Incoming>,
-    local_socket: SocketAddr,
-) -> Option<Response<BoxBody<Bytes, Error>>> {
-    if rules.contains(&req.uri().host().expect("Host must exist").to_string()) {
-        let resp = create_response(StatusCode::FORBIDDEN);
-        error!(
-            "Error: Forbidden URI. Client: {}, Request URL: {}, StatusCode: {}",
-            local_socket.to_string(),
-            &req.uri(),
-            resp.status()
-        );
-        return Some(resp);
-    }
-    None
+    req: &Request<hyper::body::Incoming>
+) -> bool {
+    rules.contains(&req.uri().host().expect("Host must exist").to_string())
 }
 
 fn parse_blacklist(path: &str) -> Vec<String> {
