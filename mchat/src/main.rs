@@ -1,3 +1,4 @@
+use log::{debug, error, info, warn};
 use rand::RngCore;
 use std::collections::HashMap;
 use std::error::Error;
@@ -27,12 +28,11 @@ fn get_name_from_client(stream: &Arc<TcpStream>) -> Result<String, Box<dyn Error
         .map(|x| *x)
         .collect();
     let name = String::from_utf8(name_text)?;
-    println!("Got name: {}", name);
     Ok(name)
 }
 
 fn handle_client(stream: Arc<TcpStream>, send_channel: Sender<Messages>) {
-    println!("Client connected!");
+    info!("Client connected!");
 
     let addr = match stream.peer_addr() {
         Ok(addr) => addr,
@@ -42,17 +42,16 @@ fn handle_client(stream: Arc<TcpStream>, send_channel: Sender<Messages>) {
     loop {
         let mut vec = [0; 128];
         let n = stream.as_ref().read(&mut vec).map_err(|err| {
-            eprintln!("ERROR: Client could not read incoming message: {err}");
+            error!("ERROR: Client could not read incoming message: {err}");
         });
         if n == Ok(0) {
             let _ = send_channel
                 .send(Messages::ClientDisconnected(addr))
                 .map_err(|err| {
-                    eprintln!("ERROR: Could not distribute disconnect message: {err}");
+                    error!("ERROR: Could not distribute disconnect message: {err}");
                 });
             return;
         }
-        println!("INFO: Read n bytes: {:?}", n.unwrap());
         let text: Vec<u8> = vec[0..n.unwrap()]
             .iter()
             .filter_map(|x| if *x >= 32 { Some(*x) } else { None })
@@ -60,7 +59,7 @@ fn handle_client(stream: Arc<TcpStream>, send_channel: Sender<Messages>) {
         let _ = send_channel
             .send(Messages::DistributeMessage(text, addr))
             .map_err(|err| {
-                eprintln!("ERROR: Could not distribute message: {err}");
+                error!("ERROR: Could not distribute message: {err}");
             });
     }
 }
@@ -111,20 +110,22 @@ fn is_ddos(now: &SystemTime, client: &Client) -> bool {
 impl Server {
     fn distribute_to_all_clients(&mut self, sender: SocketAddr, msg: &Vec<u8>) {
         let mut closed_streams: Vec<SocketAddr> = Vec::new();
-        for (addr, client) in &self.clients {
-            let stream = &client.stream;
-            if client.is_connected && *addr != sender {
-                if let Ok(msg) = String::from_utf8(msg.clone()) {
-                    if let Err(e) = writeln!(stream.as_ref(), "{:?}", msg) {
-                        eprintln!("ERROR: Could not send message to client: {e}");
-                        closed_streams.push(*addr);
+        if let Some(from) = self.clients.get(&sender) {
+            for (addr, client) in &self.clients {
+                let stream = &client.stream;
+                if client.is_connected && *addr != sender {
+                    if let Ok(msg) = String::from_utf8(msg.clone()) {
+                        if let Err(e) = writeln!(stream.as_ref(), "{:?}: {:?}", from.name, msg) {
+                            error!("ERROR: Could not send message to client: {e}");
+                            closed_streams.push(*addr);
+                        }
                     }
                 }
             }
-        }
-        for addr in &mut closed_streams {
-            if let Some(client) = self.clients.get_mut(addr) {
-                client.is_connected = false;
+            for addr in &mut closed_streams {
+                if let Some(client) = self.clients.get_mut(addr) {
+                    client.is_connected = false;
+                }
             }
         }
     }
@@ -139,7 +140,7 @@ impl Server {
                     .expect("Cant go back in time");
                 let threshold = Duration::from_secs(10);
                 if time_passed < threshold {
-                    println!("INFO: Client {} is banned.", sender);
+                    info!("INFO: Client {} is banned.", sender);
                     match self.clients.get(sender) {
                         Some(client) => {
                             writeln!(
@@ -150,12 +151,12 @@ impl Server {
                             .unwrap();
                         }
                         None => {
-                            eprintln!("Client not present in chat");
+                            warn!("Client not present in chat");
                         }
                     }
                     return false;
                 } else {
-                    println!("INFO: Client {} is no longer banned.", sender);
+                    info!("INFO: Client {} is no longer banned.", sender);
                     if let Some(client) = self.clients.get_mut(sender) {
                         client.msg_strikes = 0;
                     }
@@ -171,7 +172,7 @@ impl Server {
                             client.last_message = now;
                             match client.msg_strikes {
                                 0..=1 => {
-                                    println!("Client {sender} got striked");
+                                    info!("Client {sender} got striked");
                                     client.msg_strikes += 1;
                                     return true;
                                 }
@@ -192,7 +193,7 @@ impl Server {
                         }
                     }
                     None => {
-                        eprintln!("Client not present in map {sender}");
+                        debug!("Client not present in map {sender}");
                         return false;
                     }
                 }
@@ -204,12 +205,12 @@ impl Server {
         loop {
             let received_data = receiver
                 .recv()
-                .map_err(|e| eprintln!("ERROR: Could not receive in server channel: {e}"))?;
+                .map_err(|e| error!("ERROR: Could not receive in server channel: {e}"))?;
             self.purge_disconnected_clients();
 
             match received_data {
                 Messages::ClientConnected(stream, send_ch) => {
-                    println!(
+                    info!(
                         "INFO: Server has been notified of a new stream {}",
                         stream.peer_addr().unwrap()
                     );
@@ -217,13 +218,13 @@ impl Server {
                         Ok(is_authenticated) => {
                             if !is_authenticated {
                                 let _ = stream.as_ref().write(b"Authentication failed");
-                                println!("Authentication failed");
+                                debug!("Authentication failed");
                                 continue;
                             }
-                            println!("Authenticated");
+                            debug!("Authenticated");
                         }
-                        Err(_) => {
-                            println!("Error while authenticating");
+                        Err(e) => {
+                            error!("Error while authenticating: {}", e);
                             continue;
                         }
                     }
@@ -231,7 +232,7 @@ impl Server {
                     let name = match get_name_from_client(&stream) {
                         Ok(name) => name,
                         Err(e) => {
-                            println!("Failed to get name: {}", e);
+                            error!("Failed to get name: {}", e);
                             continue;
                         }
                     };
@@ -246,7 +247,7 @@ impl Server {
                             if client.conn_strikes > 3 {
                                 self.ban_list.insert(stream.peer_addr().unwrap(), now);
                                 let _ = writeln!(stream.as_ref(), "You are banned. LOL!")
-                                    .map_err(|e| println!("failed to notify banned client: {}", e));
+                                    .map_err(|e| error!("failed to notify banned client: {}", e));
                                 let _ = stream.shutdown(std::net::Shutdown::Both);
                                 continue;
                             } else {
@@ -265,10 +266,11 @@ impl Server {
                         }
                     }
                     if let Err(e) = writeln!(stream.as_ref(), "Welcome {:?} to the chat!", name) {
-                        eprintln!("Failed to send welcome message: {e}");
+                        error!("Failed to send welcome message: {e}");
                         self.mark_as_disconnected(&addr);
                         continue;
                     }
+                    // One thread per user will not scale :)
                     thread::spawn(move || handle_client(stream, send_ch));
                 }
                 Messages::DistributeMessage(msg, sender) => {
@@ -277,10 +279,7 @@ impl Server {
                     }
                 }
                 Messages::ClientDisconnected(sender) => {
-                    if let Some(client) = self.clients.get_mut(&sender) {
-                        println!("Client {} disconnected. ", sender);
-                        client.is_connected = false;
-                    }
+                    self.mark_as_disconnected(&sender);
                 }
             }
         }
@@ -295,58 +294,44 @@ impl Server {
 
     fn mark_as_disconnected(&mut self, addr: &SocketAddr) {
         if let Some(client) = self.clients.get_mut(addr) {
-            println!("Client {} disconnected. ", addr);
+            info!("Client {} disconnected. ", addr);
             client.is_connected = false;
         }
     }
 }
 
-struct AuthenticationError;
-
-fn authenticate(
-    stream: &Arc<TcpStream>,
-    expected_token: &Vec<u8>,
-) -> Result<bool, AuthenticationError> {
-    if let Err(e) = stream.as_ref().write(b"Token: ") {
-        eprintln!("Failed to ask for token: {e}");
-        return Err(AuthenticationError);
-    }
+fn authenticate(stream: &Arc<TcpStream>, expected_token: &Vec<u8>) -> Result<bool, Box<dyn Error>> {
+    stream.as_ref().write(b"Token: ")?;
     let mut token: Vec<u8> = vec![0; 17];
-    let n = match stream.as_ref().read(&mut token) {
-        Ok(n) => n,
-        Err(e) => {
-            eprintln!("Failed to read token answer: {e}");
-            return Err(AuthenticationError);
-        }
-    };
+    let n = stream.as_ref().read(&mut token)?;
     let token: Vec<u8> = token
         .iter()
         .filter_map(|x| if *x >= 32 { Some(*x) } else { None })
         .collect();
     let token = &token[0..16];
-    println!("Read token bytes: {}", n);
     if n < expected_token.len() {
-        println!(
+        debug!(
             "Did not read enough bytes for token to be correct. Expected: {}, got: {}",
             expected_token.len(),
             n
         );
         return Ok(false);
     }
-    println!("token: {:?}, expected: {:?}", token, expected_token);
     Ok(token == *expected_token)
 }
 
 fn generate_token() -> String {
     let mut bytes = [0; 8];
     rand::thread_rng().fill_bytes(&mut bytes);
-    println!("{}", hex::encode(&bytes).to_ascii_uppercase());
+    info!("{}", hex::encode(&bytes).to_ascii_uppercase());
     hex::encode(bytes).to_ascii_uppercase()
 }
 
 fn main() -> Result<(), ()> {
+    log4rs::init_file("log_config.yaml", Default::default()).unwrap();
+
     let listener = TcpListener::bind("127.0.0.1:7007").map_err(|err| {
-        eprintln!("ERROR: Cannot bind to localhost. Err: {err}");
+        error!("ERROR: Cannot bind to localhost. Err: {err}");
     })?;
 
     let (sender, receiver): (Sender<Messages>, Receiver<Messages>) = mpsc::channel();
@@ -369,7 +354,7 @@ fn main() -> Result<(), ()> {
                 ));
             }
             Err(e) => {
-                eprintln!("ERROR: failed to accept stream: {e}");
+                error!("ERROR: failed to accept stream: {e}");
             }
         }
     }
