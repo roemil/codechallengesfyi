@@ -27,11 +27,16 @@ fn get_name_from_client(stream: &Arc<TcpStream>) -> String {
     });
     let name_text: Vec<u8> = name[0..n.unwrap()]
         .iter()
-        .cloned()
-        .filter(|x| *x >= 32)
+        .filter(|x| **x >= 32)
+        .map(|x| *x)
         .collect();
-    let name_prefix = String::from_utf8(name_text.to_vec()).unwrap();
-    return name_prefix;
+    match String::from_utf8(name_text.to_vec()) {
+        Ok(str) => str,
+        Err(e) => {
+            eprintln!("Failed to convert to str: {}", e);
+            String::new()
+        }
+    }
 }
 
 fn handle_client(stream: Arc<TcpStream>, send_channel: Sender<Messages>) {
@@ -65,12 +70,12 @@ fn handle_client(stream: Arc<TcpStream>, send_channel: Sender<Messages>) {
         println!("INFO: Read n bytes: {:?}", n.unwrap());
         let text: Vec<u8> = vec[0..n.unwrap()]
             .iter()
-            .cloned()
-            .filter(|x| *x >= 32)
+            .filter(|x| **x >= 32)
+            .map(|x| *x)
             .collect();
         let _ = send_channel
             .send(Messages::DistributeMessage(
-                text.to_vec(),
+                text,
                 stream.peer_addr().unwrap(),
             ))
             .map_err(|err| {
@@ -92,18 +97,13 @@ struct Client {
     stream: Arc<TcpStream>,
 }
 
-
 struct Server {
     clients: HashMap<SocketAddr, Client>,
     ban_list: HashMap<SocketAddr, SystemTime>,
 }
 
 impl Server {
-    fn distribute_to_all_clients(&self,
-        sender: SocketAddr,
-        name: &str,
-        msg: &Vec<u8>,
-    ) {
+    fn distribute_to_all_clients(&self, sender: SocketAddr, name: &str, msg: &Vec<u8>) {
         for (addr, client) in &self.clients {
             let stream = &client.stream;
             if *addr != sender {
@@ -121,37 +121,34 @@ impl Server {
     }
 
     // TODO: Refactor this function
-fn is_allowed_to_send_msg(&mut self, sender: &SocketAddr) -> bool {
-    let now = SystemTime::now();
-    match self.ban_list.get(&sender) {
-        Some(banned_at) => {
-            let time_left = Duration::from_secs(10) - now.duration_since(*banned_at).unwrap();
-            if time_left > Duration::from_secs(0)
-            {
-                println!(
-                    "INFO: Client {} is banned.",
-                    sender
-                );
-                match self.clients.get(sender)
-                {
-                    Some(client) => {
-                        writeln!(client.stream.as_ref(), "You are still banned for {:?}", time_left.as_secs()).unwrap();
-                    },
-                    None => {
-                        eprintln!("Client not present in map");
+    fn is_allowed_to_send_msg(&mut self, sender: &SocketAddr) -> bool {
+        let now = SystemTime::now();
+        match self.ban_list.get(&sender) {
+            Some(banned_at) => {
+                let time_left = Duration::from_secs(10) - now.duration_since(*banned_at).expect("Cant go back in time");
+                if time_left > Duration::from_secs(0) {
+                    println!("INFO: Client {} is banned.", sender);
+                    match self.clients.get(sender) {
+                        Some(client) => {
+                            writeln!(
+                                client.stream.as_ref(),
+                                "You are still banned for {:?}",
+                                time_left.as_secs()
+                            )
+                            .unwrap();
+                        }
+                        None => {
+                            eprintln!("Client not present in chat");
+                        }
                     }
+                    return false;
+                } else {
+                    println!("INFO: Client {} is no longer banned.", sender);
+                    self.ban_list.remove(sender);
+                    return true;
                 }
-                return false;
-            } else {
-                println!(
-                    "INFO: Client {} is no longer banned.",
-                    sender
-                );
-                self.ban_list.remove(sender);
-                return true;
             }
-        }
-        None => {
+            None => {
                 let threshold = Duration::from_millis(500);
                 match self.clients.get_mut(sender) {
                     Some(client) => {
@@ -166,7 +163,8 @@ fn is_allowed_to_send_msg(&mut self, sender: &SocketAddr) -> bool {
                                 2 => {
                                     client.strikes += 1;
                                     self.ban_list.insert(*sender, now);
-                                    writeln!(client.stream.as_ref(), "You are banned. LOL!").unwrap();
+                                    writeln!(client.stream.as_ref(), "You are banned. LOL!")
+                                        .unwrap();
                                     return false;
                                 }
                                 num => {
@@ -177,17 +175,16 @@ fn is_allowed_to_send_msg(&mut self, sender: &SocketAddr) -> bool {
                             client.last_message = now;
                             return true;
                         }
-                    },
+                    }
                     None => {
                         eprintln!("Client not present in map {sender}");
                         return false;
                     }
                 }
             }
+        }
     }
-}
 
-    
     fn start(mut self, receiver: Receiver<Messages>) {
         loop {
             match receiver.recv() {
@@ -203,7 +200,7 @@ fn is_allowed_to_send_msg(&mut self, sender: &SocketAddr) -> bool {
                                 client.stream = stream.clone();
                                 client.name = name;
                                 client.last_message = now;
-                            },
+                            }
                             None => {
                                 let client = Client {
                                     stream: stream.clone(),
@@ -215,7 +212,6 @@ fn is_allowed_to_send_msg(&mut self, sender: &SocketAddr) -> bool {
                             }
                         }
                         // TODO: Rate limit connections from same peer
-
                     }
                     Messages::DistributeMessage(msg, sender) => {
                         // TODO: Rate limit messages from same sender.
@@ -225,7 +221,10 @@ fn is_allowed_to_send_msg(&mut self, sender: &SocketAddr) -> bool {
                                     self.distribute_to_all_clients(sender, &client.name, &msg)
                                 }
                                 None => {
-                                    eprintln!("INFO: Client no longer present in server: {}", sender);
+                                    eprintln!(
+                                        "INFO: Client no longer present in server: {}",
+                                        sender
+                                    );
                                 }
                             }
                         }
@@ -255,7 +254,10 @@ fn main() {
 
     let (sender, receiver): (Sender<Messages>, Receiver<Messages>) = mpsc::channel();
 
-    let server : Server = Server { clients: HashMap::new(), ban_list: HashMap::new() };
+    let server: Server = Server {
+        clients: HashMap::new(),
+        ban_list: HashMap::new(),
+    };
     thread::spawn(move || Server::start(server, receiver));
 
     match listener {
