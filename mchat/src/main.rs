@@ -283,10 +283,10 @@ impl Server {
     }
 }
 
-fn main() {
+fn main() -> Result<(), ()> {
     let listener = TcpListener::bind("127.0.0.1:7007").map_err(|err| {
         eprintln!("ERROR: Cannot bind to localhost. Err: {err}");
-    });
+    })?;
 
     let (sender, receiver): (Sender<Messages>, Receiver<Messages>) = mpsc::channel();
 
@@ -296,24 +296,18 @@ fn main() {
     };
     thread::spawn(move || Server::start(server, receiver));
 
-    match listener {
-        Ok(listener) => {
-            for stream in listener.incoming() {
-                match stream {
-                    Ok(stream) => {
-                        let send_channel = sender.clone();
-                        let tcp_stream = Arc::new(stream).clone();
-                        let _ = send_channel.send(Messages::ClientConnected(tcp_stream.clone()));
-                        thread::spawn(move || handle_client(tcp_stream, send_channel));
-                    }
-                    Err(e) => {
-                        eprintln!("ERROR: failed to accept stream: {e}");
-                    }
-                }
+    for stream in listener.incoming() {
+        match stream {
+            Ok(stream) => {
+                let send_channel = sender.clone();
+                let tcp_stream = Arc::new(stream).clone();
+                let _ = send_channel.send(Messages::ClientConnected(tcp_stream.clone()));
+                thread::spawn(move || handle_client(tcp_stream, send_channel));
+            }
+            Err(e) => {
+                eprintln!("ERROR: failed to accept stream: {e}");
             }
         }
-        Err(e) => {
-            eprintln!("ERROR: failed to listen: {:?}", e);
-        }
     }
+    Ok(())
 }
