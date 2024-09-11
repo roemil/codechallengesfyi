@@ -48,6 +48,16 @@ fn handle_client(stream: Arc<TcpStream>, send_channel: Sender<Messages>) {
     let _ = writeln!(stream.as_ref(), "Welcome {:?} to the chat!", name).map_err(|err| {
         eprintln!("Failed to send welcome message: {err}");
     });
+    let prefix: Vec<u8> = String::from(name.clone() + ": ")
+        .as_bytes()
+        .iter()
+        .filter_map(|x| if *x >= 32 { Some(*x) } else { None })
+        .collect();
+
+    let addr = match stream.peer_addr() {
+        Ok(addr) => addr,
+        Err(_) => return,
+    };
 
     loop {
         let mut vec = [0; 128];
@@ -56,28 +66,21 @@ fn handle_client(stream: Arc<TcpStream>, send_channel: Sender<Messages>) {
         });
         if n == Ok(0) {
             let _ = send_channel
-                .send(Messages::ClientDisconnected(stream.peer_addr().unwrap()))
+                .send(Messages::ClientDisconnected(addr))
                 .map_err(|err| {
                     eprintln!("ERROR: Could not distribute disconnect message: {err}");
                 });
             return;
         }
         println!("INFO: Read n bytes: {:?}", n.unwrap());
-        let prefix = String::from(name.clone() + ": ")
-            .as_bytes()
-            .iter()
-            .filter(|x| **x >= 32)
-            .map(|x| *x)
-            .collect();
         let text: Vec<u8> = vec[0..n.unwrap()]
             .iter()
-            .filter(|x| **x >= 32)
-            .map(|x| *x)
+            .filter_map(|x| if *x >= 32 { Some(*x) } else { None })
             .collect();
         let _ = send_channel
             .send(Messages::DistributeMessage(
-                [prefix, text].concat(),
-                stream.peer_addr().unwrap(),
+                [prefix.clone(), text].concat(),
+                addr,
             ))
             .map_err(|err| {
                 eprintln!("ERROR: Could not distribute message: {err}");
@@ -107,25 +110,31 @@ struct Server {
 }
 
 fn is_ddos(now: &SystemTime, client: &Client) -> bool {
-    let threshold = Duration::from_millis(500);
+    let threshold = Duration::from_millis(5000);
     now.duration_since(client.last_connection)
         .expect("Cannot go back in time")
         < threshold
 }
 
 impl Server {
-    fn distribute_to_all_clients(&self, sender: SocketAddr, msg: &Vec<u8>) {
+    fn distribute_to_all_clients(&mut self, sender: SocketAddr, msg: &Vec<u8>) {
+        let mut closed_streams: Vec<SocketAddr> = Vec::new();
         for (addr, client) in &self.clients {
             let stream = &client.stream;
-            if *addr != sender {
-                let _ = writeln!(
+            if client.is_connected && *addr != sender {
+                if let Err(e) = writeln!(
                     stream.as_ref(),
                     "{:?}",
                     String::from_utf8(msg.clone()).unwrap()
-                )
-                .map_err(|err| {
-                    eprintln!("ERROR: Could not send message to client: {err}");
-                });
+                ) {
+                    eprintln!("ERROR: Could not send message to client: {e}");
+                    closed_streams.push(*addr);
+                }
+            }
+        }
+        for addr in &mut closed_streams {
+            if let Some(client) = self.clients.get_mut(addr) {
+                client.is_connected = false;
             }
         }
     }
@@ -243,17 +252,7 @@ impl Server {
                     }
                     Messages::DistributeMessage(msg, sender) => {
                         if self.is_allowed_to_send_msg(&sender) {
-                            match self.clients.get(&sender) {
-                                Some(client) => {
-                                    self.distribute_to_all_clients(sender, &msg)
-                                }
-                                None => {
-                                    eprintln!(
-                                        "INFO: Client no longer present in server: {}",
-                                        sender
-                                    );
-                                }
-                            }
+                            self.distribute_to_all_clients(sender, &msg);
                         }
                     }
                     Messages::ClientDisconnected(sender) => match self.clients.get_mut(&sender) {
