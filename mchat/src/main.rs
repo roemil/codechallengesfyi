@@ -33,26 +33,29 @@ fn get_name_from_client(stream: &Arc<TcpStream>) -> Result<String, Box<dyn Error
 
 fn handle_client(stream: Arc<TcpStream>, send_channel: Sender<Messages>) {
     info!("Client connected!");
+    let _ = client_loop(stream, send_channel);
+}
 
-    let addr = match stream.peer_addr() {
-        Ok(addr) => addr,
-        Err(_) => return,
-    };
-
+fn client_loop(
+    stream: Arc<TcpStream>,
+    send_channel: Sender<Messages>,
+) -> Result<(), Box<dyn Error>> {
+    let addr = stream.peer_addr()?;
     loop {
         let mut vec = [0; 128];
         let n = stream.as_ref().read(&mut vec).map_err(|err| {
             error!("ERROR: Client could not read incoming message: {err}");
-        });
-        if n == Ok(0) {
+            err
+        })?;
+        if n == 0 {
             let _ = send_channel
                 .send(Messages::ClientDisconnected(addr))
                 .map_err(|err| {
                     error!("ERROR: Could not distribute disconnect message: {err}");
-                });
-            return;
+                    err
+                })?;
         }
-        let text: Vec<u8> = vec[0..n.unwrap()]
+        let text: Vec<u8> = vec[0..n]
             .iter()
             .filter_map(|x| if *x >= 32 { Some(*x) } else { None })
             .collect();
@@ -60,7 +63,8 @@ fn handle_client(stream: Arc<TcpStream>, send_channel: Sender<Messages>) {
             .send(Messages::DistributeMessage(text, addr))
             .map_err(|err| {
                 error!("ERROR: Could not distribute message: {err}");
-            });
+                err
+            })?;
     }
 }
 
@@ -130,7 +134,6 @@ impl Server {
         }
     }
 
-    // TODO: Refactor this function
     fn is_allowed_to_send_msg(&mut self, sender: &SocketAddr) -> bool {
         let now = SystemTime::now();
         match self.ban_list.get(&sender) {
