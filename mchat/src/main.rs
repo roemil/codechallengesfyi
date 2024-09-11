@@ -103,6 +103,19 @@ struct Client {
     is_connected: bool,
 }
 
+impl Client {
+    pub fn new(stream: Arc<TcpStream>, last_seen: SystemTime) -> Self {
+        Client {
+            stream: stream,
+            last_message: last_seen,
+            last_connection: last_seen,
+            msg_strikes: 0,
+            conn_strikes: 0,
+            is_connected: true,
+        }
+    }
+}
+
 struct Server {
     clients: HashMap<SocketAddr, Client>,
     ban_list: HashMap<SocketAddr, SystemTime>,
@@ -121,13 +134,11 @@ impl Server {
         for (addr, client) in &self.clients {
             let stream = &client.stream;
             if client.is_connected && *addr != sender {
-                if let Err(e) = writeln!(
-                    stream.as_ref(),
-                    "{:?}",
-                    String::from_utf8(msg.clone()).unwrap()
-                ) {
-                    eprintln!("ERROR: Could not send message to client: {e}");
-                    closed_streams.push(*addr);
+                if let Ok(msg) = String::from_utf8(msg.clone()) {
+                    if let Err(e) = writeln!(stream.as_ref(), "{:?}", msg) {
+                        eprintln!("ERROR: Could not send message to client: {e}");
+                        closed_streams.push(*addr);
+                    }
                 }
             }
         }
@@ -243,15 +254,10 @@ impl Server {
                                 }
                             }
                             None => {
-                                let client = Client {
-                                    stream: stream.clone(),
-                                    last_message: now,
-                                    last_connection: now,
-                                    msg_strikes: 0,
-                                    conn_strikes: 0,
-                                    is_connected: true,
-                                };
-                                self.clients.insert(stream.peer_addr().unwrap(), client);
+                                self.clients.insert(
+                                    stream.peer_addr().unwrap(),
+                                    Client::new(stream.clone(), now),
+                                );
                             }
                         }
                         // TODO: Rate limit connections from same peer
