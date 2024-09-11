@@ -143,18 +143,18 @@ impl Server {
         let now = SystemTime::now();
         match self.ban_list.get(&sender) {
             Some(banned_at) => {
-                let time_left = Duration::from_secs(10)
-                    - now
-                        .duration_since(*banned_at)
-                        .expect("Cant go back in time");
-                if time_left > Duration::from_secs(0) {
+                let time_passed = now
+                    .duration_since(*banned_at)
+                    .expect("Cant go back in time");
+                let threshold = Duration::from_secs(10);
+                if time_passed < threshold {
                     println!("INFO: Client {} is banned.", sender);
                     match self.clients.get(sender) {
                         Some(client) => {
                             writeln!(
                                 client.stream.as_ref(),
                                 "You are still banned for {:?}",
-                                time_left.as_secs()
+                                (threshold-time_passed).as_secs()
                             )
                             .unwrap();
                         }
@@ -165,6 +165,9 @@ impl Server {
                     return false;
                 } else {
                     println!("INFO: Client {} is no longer banned.", sender);
+                    if let Some(client) = self.clients.get_mut(sender) {
+                        client.msg_strikes = 0;
+                    }
                     self.ban_list.remove(sender);
                     return true;
                 }
@@ -219,13 +222,15 @@ impl Server {
                         let now = SystemTime::now();
                         match self.clients.get_mut(&stream.peer_addr().unwrap()) {
                             Some(client) => {
-                                println!("Old client");
                                 if is_ddos(&now, &client) {
                                     client.conn_strikes += 1;
                                 }
                                 if client.conn_strikes > 3 {
                                     self.ban_list.insert(stream.peer_addr().unwrap(), now);
-                                    writeln!(stream.as_ref(), "You are banned. LOL!").unwrap();
+                                    let _ = writeln!(stream.as_ref(), "You are banned. LOL!")
+                                        .map_err(|e| {
+                                            println!("failed to notify banned client: {}", e)
+                                        });
                                     let _ = stream.shutdown(std::net::Shutdown::Both);
                                 } else {
                                     client.stream = stream.clone();
@@ -234,8 +239,6 @@ impl Server {
                                 }
                             }
                             None => {
-                                println!("New client");
-
                                 let client = Client {
                                     stream: stream.clone(),
                                     last_message: now,
@@ -254,16 +257,12 @@ impl Server {
                             self.distribute_to_all_clients(sender, &msg);
                         }
                     }
-                    Messages::ClientDisconnected(sender) => match self.clients.get_mut(&sender) {
-                        Some(client) => {
+                    Messages::ClientDisconnected(sender) => {
+                        if let Some(client) = self.clients.get_mut(&sender) {
                             println!("Client {} disconnected. ", sender);
                             client.is_connected = false;
-                            //self.clients.remove(&client.stream.peer_addr().unwrap());
                         }
-                        None => {
-                            eprintln!("INFO: Client no longer present in server: {}", sender);
-                        }
-                    },
+                    }
                 },
                 Err(e) => {
                     eprintln!("ERROR: Could not receive in server channel: {e}");
