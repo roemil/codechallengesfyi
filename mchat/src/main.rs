@@ -41,7 +41,6 @@ fn get_name_from_client(stream: &Arc<TcpStream>) -> String {
 }
 
 fn handle_client(stream: Arc<TcpStream>, send_channel: Sender<Messages>) {
-    // TODO: Move this to server side - easier to handle rate limiting
     println!("Client connected!");
     let name = get_name_from_client(&stream);
 
