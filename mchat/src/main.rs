@@ -1,3 +1,4 @@
+use std::alloc::System;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
@@ -30,7 +31,7 @@ fn get_name_from_client(stream: &Arc<TcpStream>) -> String {
         .filter(|x| **x >= 32)
         .map(|x| *x)
         .collect();
-    match String::from_utf8(name_text.to_vec()) {
+    match String::from_utf8(name_text) {
         Ok(str) => str,
         Err(e) => {
             eprintln!("Failed to convert to str: {}", e);
@@ -43,12 +44,6 @@ fn handle_client(stream: Arc<TcpStream>, send_channel: Sender<Messages>) {
     // TODO: Move this to server side - easier to handle rate limiting
     println!("Client connected!");
     let name = get_name_from_client(&stream);
-
-    let _ = send_channel
-        .send(Messages::ClientConnected(stream.clone(), name.clone()))
-        .map_err(|err| {
-            eprintln!("ERROR: Could not notify server with new client: {err}");
-        });
 
     let _ = writeln!(stream.as_ref(), "Welcome {:?} to the chat!", name).map_err(|err| {
         eprintln!("Failed to send welcome message: {err}");
@@ -68,6 +63,12 @@ fn handle_client(stream: Arc<TcpStream>, send_channel: Sender<Messages>) {
             return;
         }
         println!("INFO: Read n bytes: {:?}", n.unwrap());
+        let prefix = String::from(name.clone() + ": ")
+            .as_bytes()
+            .iter()
+            .filter(|x| **x >= 32)
+            .map(|x| *x)
+            .collect();
         let text: Vec<u8> = vec[0..n.unwrap()]
             .iter()
             .filter(|x| **x >= 32)
@@ -75,7 +76,7 @@ fn handle_client(stream: Arc<TcpStream>, send_channel: Sender<Messages>) {
             .collect();
         let _ = send_channel
             .send(Messages::DistributeMessage(
-                text,
+                [prefix, text].concat(),
                 stream.peer_addr().unwrap(),
             ))
             .map_err(|err| {
@@ -83,18 +84,21 @@ fn handle_client(stream: Arc<TcpStream>, send_channel: Sender<Messages>) {
             });
     }
 }
+
 enum Messages {
-    ClientConnected(Arc<TcpStream>, String),
+    ClientConnected(Arc<TcpStream>),
     DistributeMessage(Vec<u8>, SocketAddr),
     ClientDisconnected(SocketAddr),
 }
 
 #[derive(Clone, Debug)]
 struct Client {
-    name: String,
     last_message: SystemTime,
-    strikes: u8,
+    last_connection: SystemTime,
+    msg_strikes: u8,
+    conn_strikes: u8,
     stream: Arc<TcpStream>,
+    is_connected: bool,
 }
 
 struct Server {
@@ -102,15 +106,21 @@ struct Server {
     ban_list: HashMap<SocketAddr, SystemTime>,
 }
 
+fn is_ddos(now: &SystemTime, client: &Client) -> bool {
+    let threshold = Duration::from_millis(500);
+    now.duration_since(client.last_connection)
+        .expect("Cannot go back in time")
+        < threshold
+}
+
 impl Server {
-    fn distribute_to_all_clients(&self, sender: SocketAddr, name: &str, msg: &Vec<u8>) {
+    fn distribute_to_all_clients(&self, sender: SocketAddr, msg: &Vec<u8>) {
         for (addr, client) in &self.clients {
             let stream = &client.stream;
             if *addr != sender {
                 let _ = writeln!(
                     stream.as_ref(),
-                    "{:?}: {:?}",
-                    name,
+                    "{:?}",
                     String::from_utf8(msg.clone()).unwrap()
                 )
                 .map_err(|err| {
@@ -125,7 +135,10 @@ impl Server {
         let now = SystemTime::now();
         match self.ban_list.get(&sender) {
             Some(banned_at) => {
-                let time_left = Duration::from_secs(10) - now.duration_since(*banned_at).expect("Cant go back in time");
+                let time_left = Duration::from_secs(10)
+                    - now
+                        .duration_since(*banned_at)
+                        .expect("Cant go back in time");
                 if time_left > Duration::from_secs(0) {
                     println!("INFO: Client {} is banned.", sender);
                     match self.clients.get(sender) {
@@ -154,14 +167,14 @@ impl Server {
                     Some(client) => {
                         if now.duration_since(client.last_message).unwrap() < threshold {
                             client.last_message = now;
-                            match client.strikes {
+                            match client.msg_strikes {
                                 0..=1 => {
                                     println!("Client {sender} got striked");
-                                    client.strikes += 1;
+                                    client.msg_strikes += 1;
                                     return true;
                                 }
                                 2 => {
-                                    client.strikes += 1;
+                                    client.msg_strikes += 1;
                                     self.ban_list.insert(*sender, now);
                                     writeln!(client.stream.as_ref(), "You are banned. LOL!")
                                         .unwrap();
@@ -189,24 +202,39 @@ impl Server {
         loop {
             match receiver.recv() {
                 Ok(data) => match data {
-                    Messages::ClientConnected(stream, name) => {
+                    Messages::ClientConnected(stream) => {
                         println!(
                             "INFO: Server has been notified of a new stream {}",
                             stream.peer_addr().unwrap()
                         );
+
                         let now = SystemTime::now();
                         match self.clients.get_mut(&stream.peer_addr().unwrap()) {
                             Some(client) => {
-                                client.stream = stream.clone();
-                                client.name = name;
-                                client.last_message = now;
+                                println!("Old client");
+                                if is_ddos(&now, &client) {
+                                    client.conn_strikes += 1;
+                                }
+                                if client.conn_strikes > 3 {
+                                    self.ban_list.insert(stream.peer_addr().unwrap(), now);
+                                    writeln!(stream.as_ref(), "You are banned. LOL!").unwrap();
+                                    let _ = stream.shutdown(std::net::Shutdown::Both);
+                                } else {
+                                    client.stream = stream.clone();
+                                    client.last_message = now;
+                                    client.last_connection = now;
+                                }
                             }
                             None => {
+                                println!("New client");
+
                                 let client = Client {
                                     stream: stream.clone(),
-                                    name,
                                     last_message: now,
-                                    strikes: 0,
+                                    last_connection: now,
+                                    msg_strikes: 0,
+                                    conn_strikes: 0,
+                                    is_connected: true,
                                 };
                                 self.clients.insert(stream.peer_addr().unwrap(), client);
                             }
@@ -214,11 +242,10 @@ impl Server {
                         // TODO: Rate limit connections from same peer
                     }
                     Messages::DistributeMessage(msg, sender) => {
-                        // TODO: Rate limit messages from same sender.
                         if self.is_allowed_to_send_msg(&sender) {
                             match self.clients.get(&sender) {
                                 Some(client) => {
-                                    self.distribute_to_all_clients(sender, &client.name, &msg)
+                                    self.distribute_to_all_clients(sender, &msg)
                                 }
                                 None => {
                                     eprintln!(
@@ -229,10 +256,11 @@ impl Server {
                             }
                         }
                     }
-                    Messages::ClientDisconnected(sender) => match self.clients.get(&sender) {
+                    Messages::ClientDisconnected(sender) => match self.clients.get_mut(&sender) {
                         Some(client) => {
                             println!("Client {} disconnected. ", sender);
-                            self.clients.remove(&client.stream.peer_addr().unwrap());
+                            client.is_connected = false;
+                            //self.clients.remove(&client.stream.peer_addr().unwrap());
                         }
                         None => {
                             eprintln!("INFO: Client no longer present in server: {}", sender);
@@ -262,12 +290,12 @@ fn main() {
 
     match listener {
         Ok(listener) => {
-            // accept connections and process them concurrently
             for stream in listener.incoming() {
                 match stream {
                     Ok(stream) => {
                         let send_channel = sender.clone();
                         let tcp_stream = Arc::new(stream).clone();
+                        let _ = send_channel.send(Messages::ClientConnected(tcp_stream.clone()));
                         thread::spawn(move || handle_client(tcp_stream, send_channel));
                     }
                     Err(e) => {
