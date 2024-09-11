@@ -12,10 +12,7 @@ use std::time::{Duration, SystemTime};
 
 /*
 TODO:
-then the authenticate with token - here we can check if the client tries to connect to often - not done
-... something else?
-UI for client perhaps
-
+Separate binary for client
 */
 
 fn get_name_from_client(stream: &Arc<TcpStream>) -> Result<String, Box<dyn Error>> {
