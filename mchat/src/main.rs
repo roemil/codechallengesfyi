@@ -131,7 +131,7 @@ impl Server {
         }
     }
 
-    fn is_allowed_to_send_msg(&mut self, sender: &SocketAddr) -> bool {
+    fn is_allowed_to_send_msg(&mut self, sender: &SocketAddr) -> Result<bool, Box<dyn Error>> {
         let now = SystemTime::now();
         match self.ban_list.get(&sender) {
             Some(banned_at) => {
@@ -147,41 +147,43 @@ impl Server {
                                 client.stream.as_ref(),
                                 "You are still banned for {:?}",
                                 (threshold - time_passed).as_secs()
-                            )
-                            .unwrap();
+                            )?;
                         }
                         None => {
                             warn!("Client not present in chat");
                         }
                     }
-                    return false;
+                    return Ok(false);
                 } else {
                     info!("INFO: Client {} is no longer banned.", sender);
                     if let Some(client) = self.clients.get_mut(sender) {
                         client.msg_strikes = 0;
                     }
                     self.ban_list.remove(sender);
-                    return true;
+                    return Ok(true);
                 }
             }
             None => {
                 let threshold = Duration::from_millis(500);
                 match self.clients.get_mut(sender) {
                     Some(client) => {
-                        if now.duration_since(client.last_message).unwrap() < threshold {
+                        if now
+                            .duration_since(client.last_message)
+                            .expect("Cant go back in time")
+                            < threshold
+                        {
                             client.last_message = now;
                             match client.msg_strikes {
                                 0..=1 => {
                                     info!("Client {sender} got striked");
                                     client.msg_strikes += 1;
-                                    return true;
+                                    return Ok(true);
                                 }
                                 2 => {
                                     client.msg_strikes += 1;
                                     self.ban_list.insert(*sender, now);
-                                    writeln!(client.stream.as_ref(), "You are banned. LOL!")
-                                        .unwrap();
-                                    return false;
+                                    writeln!(client.stream.as_ref(), "You are banned. LOL!")?;
+                                    return Ok(false);
                                 }
                                 num => {
                                     panic!("Number of strikes exceeds valid number. {num}");
@@ -189,12 +191,12 @@ impl Server {
                             }
                         } else {
                             client.last_message = now;
-                            return true;
+                            return Ok(true);
                         }
                     }
                     None => {
                         debug!("Client not present in map {sender}");
-                        return false;
+                        return Ok(false);
                     }
                 }
             }
@@ -274,8 +276,17 @@ impl Server {
                     thread::spawn(move || handle_client(stream, send_ch));
                 }
                 Messages::DistributeMessage(msg, sender) => {
-                    if self.is_allowed_to_send_msg(&sender) {
-                        self.distribute_to_all_clients(sender, &msg);
+                    match self.is_allowed_to_send_msg(&sender) {
+                        Ok(is_allowed) => {
+                            if is_allowed {
+                                self.distribute_to_all_clients(sender, &msg);
+                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to check if allowed to send msg: {}", e);
+                            // If something failed we probably have an invalid stream.
+                            self.mark_as_disconnected(&sender);
+                        }
                     }
                 }
                 Messages::ClientDisconnected(sender) => {
