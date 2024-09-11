@@ -1,4 +1,3 @@
-use std::alloc::System;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
@@ -10,9 +9,7 @@ use std::time::{Duration, SystemTime};
 
 /*
 TODO:
-First client chooses name - done
 then the authenticate with token - here we can check if the client tries to connect to often - not done
-Then we can rate limit messages from client - done
 ... something else?
 UI for client perhaps
 
@@ -220,62 +217,56 @@ impl Server {
         }
     }
 
-    fn start(mut self, receiver: Receiver<Messages>) {
+    fn start(mut self, receiver: Receiver<Messages>) -> Result<(), ()> {
         loop {
-            let received_data = receiver.recv();
-
+            let received_data = receiver
+                .recv()
+                .map_err(|e| eprintln!("ERROR: Could not receive in server channel: {e}"))?;
             self.purge_disconnected_clients();
 
             match received_data {
-                Ok(data) => match data {
-                    Messages::ClientConnected(stream) => {
-                        println!(
-                            "INFO: Server has been notified of a new stream {}",
-                            stream.peer_addr().unwrap()
-                        );
+                Messages::ClientConnected(stream) => {
+                    println!(
+                        "INFO: Server has been notified of a new stream {}",
+                        stream.peer_addr().unwrap()
+                    );
 
-                        let now = SystemTime::now();
-                        match self.clients.get_mut(&stream.peer_addr().unwrap()) {
-                            Some(client) => {
-                                if is_ddos(&now, &client) {
-                                    client.conn_strikes += 1;
-                                }
-                                if client.conn_strikes > 3 {
-                                    self.ban_list.insert(stream.peer_addr().unwrap(), now);
-                                    let _ = writeln!(stream.as_ref(), "You are banned. LOL!")
-                                        .map_err(|e| {
-                                            println!("failed to notify banned client: {}", e)
-                                        });
-                                    let _ = stream.shutdown(std::net::Shutdown::Both);
-                                } else {
-                                    client.stream = stream.clone();
-                                    client.last_message = now;
-                                    client.last_connection = now;
-                                }
+                    let now = SystemTime::now();
+                    match self.clients.get_mut(&stream.peer_addr().unwrap()) {
+                        Some(client) => {
+                            if is_ddos(&now, &client) {
+                                client.conn_strikes += 1;
                             }
-                            None => {
-                                self.clients.insert(
-                                    stream.peer_addr().unwrap(),
-                                    Client::new(stream.clone(), now),
-                                );
+                            if client.conn_strikes > 3 {
+                                self.ban_list.insert(stream.peer_addr().unwrap(), now);
+                                let _ = writeln!(stream.as_ref(), "You are banned. LOL!")
+                                    .map_err(|e| println!("failed to notify banned client: {}", e));
+                                let _ = stream.shutdown(std::net::Shutdown::Both);
+                            } else {
+                                client.stream = stream.clone();
+                                client.last_message = now;
+                                client.last_connection = now;
                             }
                         }
-                        // TODO: Rate limit connections from same peer
-                    }
-                    Messages::DistributeMessage(msg, sender) => {
-                        if self.is_allowed_to_send_msg(&sender) {
-                            self.distribute_to_all_clients(sender, &msg);
+                        None => {
+                            self.clients.insert(
+                                stream.peer_addr().unwrap(),
+                                Client::new(stream.clone(), now),
+                            );
                         }
                     }
-                    Messages::ClientDisconnected(sender) => {
-                        if let Some(client) = self.clients.get_mut(&sender) {
-                            println!("Client {} disconnected. ", sender);
-                            client.is_connected = false;
-                        }
+                    // TODO: Rate limit connections from same peer
+                }
+                Messages::DistributeMessage(msg, sender) => {
+                    if self.is_allowed_to_send_msg(&sender) {
+                        self.distribute_to_all_clients(sender, &msg);
                     }
-                },
-                Err(e) => {
-                    eprintln!("ERROR: Could not receive in server channel: {e}");
+                }
+                Messages::ClientDisconnected(sender) => {
+                    if let Some(client) = self.clients.get_mut(&sender) {
+                        println!("Client {} disconnected. ", sender);
+                        client.is_connected = false;
+                    }
                 }
             }
         }
