@@ -154,7 +154,7 @@ impl Server {
                             writeln!(
                                 client.stream.as_ref(),
                                 "You are still banned for {:?}",
-                                (threshold-time_passed).as_secs()
+                                (threshold - time_passed).as_secs()
                             )
                             .unwrap();
                         }
@@ -211,7 +211,11 @@ impl Server {
 
     fn start(mut self, receiver: Receiver<Messages>) {
         loop {
-            match receiver.recv() {
+            let received_data = receiver.recv();
+
+            self.purge_disconnected_clients();
+
+            match received_data {
                 Ok(data) => match data {
                     Messages::ClientConnected(stream) => {
                         println!(
@@ -269,6 +273,13 @@ impl Server {
                 }
             }
         }
+    }
+    fn purge_disconnected_clients(&mut self) {
+        let now = SystemTime::now();
+        let threshold = Duration::from_secs(20);
+        self.clients.retain(|_, client| {
+            client.is_connected || now.duration_since(client.last_message).unwrap() < threshold
+        });
     }
 }
 
