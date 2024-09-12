@@ -82,7 +82,7 @@ fn handle_with_tls(
         }
     });
     // Must return a empty body to client then the connection will be upgraded.
-    return Ok(Response::default());
+    Ok(Response::default())
 }
 
 async fn forward_request(
@@ -120,7 +120,6 @@ fn parse_blacklist(path: &str) -> Vec<String> {
     fs::read_to_string(path)
         .expect("File must exist!")
         .lines()
-        .into_iter()
         .map(|line| line.to_string())
         .collect()
 }
