@@ -4,7 +4,7 @@ use std::{
     net::{TcpListener, TcpStream},
 };
 use std::fs;
-use std::{thread, time};
+use std::thread;
 
 enum StatusCode {
     Ok = 200,
@@ -20,7 +20,7 @@ struct Response {
 impl fmt::Display for StatusCode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            StatusCode::Ok => write!(f, "{} {}", (StatusCode::Ok as i32).to_string(), "OK"),
+            StatusCode::Ok => write!(f, "{} OK", (StatusCode::Ok as i32)),
             StatusCode::NotFound => write!(f, "404 Not Found"),
             StatusCode::BadRequest => write!(f, "400 Bad Request"),
         }
@@ -30,7 +30,7 @@ impl fmt::Display for StatusCode {
 impl fmt::Display for Response {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "{}", self.status_code)?;
-        write!(f, "\n")?;
+        writeln!(f)?;
         match &self.data {
             Some(data) => write!(f, "{data}"),
             None => write!(f, ""),
@@ -50,11 +50,11 @@ fn handle_get_request(request: &str) -> Option<Response> {
     let html_data = fs::read_to_string(path);
     match html_data {
         Ok(data) => {
-            return Some(Response {status_code: StatusCode::Ok, data: Some(data) });
+            Some(Response {status_code: StatusCode::Ok, data: Some(data) })
         }
         _ => {
             eprintln!("Failed to open file");
-            return None
+            None
         },
     }
 }
@@ -76,7 +76,7 @@ fn handle_client(mut stream: &TcpStream, index : usize) {
         Some(_) => request
             .strip_prefix("GET")
             .and_then(handle_get_request)
-            .unwrap_or_else(|| Response{status_code: StatusCode::NotFound, data: None}),
+            .unwrap_or(Response{status_code: StatusCode::NotFound, data: None}),
         None => {
             eprintln!("Unsupported request");
             Response{status_code: StatusCode::BadRequest, data: None}
