@@ -16,14 +16,10 @@ Separate binary for client
 */
 
 fn get_name_from_client(stream: &Arc<TcpStream>) -> Result<String, Box<dyn Error>> {
-    stream.as_ref().write(b"Enter your name: ")?;
+    stream.as_ref().write_all(b"Enter your name: ")?;
     let mut name = [0; 128];
     let n = stream.as_ref().read(&mut name)?;
-    let name_text: Vec<u8> = name[0..n]
-        .iter()
-        .filter(|x| **x >= 32)
-        .map(|x| *x)
-        .collect();
+    let name_text: Vec<u8> = name[0..n].iter().filter(|x| **x >= 32).copied().collect();
     let name = String::from_utf8(name_text)?;
     Ok(name)
 }
@@ -45,7 +41,7 @@ fn client_loop(
             err
         })?;
         if n == 0 {
-            let _ = send_channel
+            send_channel
                 .send(Messages::ClientDisconnected(addr))
                 .map_err(|err| {
                     error!("ERROR: Could not distribute disconnect message: {err}");
@@ -56,7 +52,7 @@ fn client_loop(
             .iter()
             .filter_map(|x| if *x >= 32 { Some(*x) } else { None })
             .collect();
-        let _ = send_channel
+        send_channel
             .send(Messages::DistributeMessage(text, addr))
             .map_err(|err| {
                 error!("ERROR: Could not distribute message: {err}");
@@ -85,7 +81,7 @@ struct Client {
 impl Client {
     pub fn new(stream: Arc<TcpStream>, last_seen: SystemTime, name: String) -> Self {
         Client {
-            stream: stream,
+            stream,
             last_message: last_seen,
             last_connection: last_seen,
             msg_strikes: 0,
@@ -109,13 +105,13 @@ fn is_ddos(now: &SystemTime, client: &Client) -> bool {
 }
 
 impl Server {
-    fn distribute_to_all_clients(&mut self, sender: SocketAddr, msg: &Vec<u8>) {
+    fn distribute_to_all_clients(&mut self, sender: SocketAddr, msg: &[u8]) {
         let mut closed_streams: Vec<SocketAddr> = Vec::new();
         if let Some(from) = self.clients.get(&sender) {
             for (addr, client) in &self.clients {
                 let stream = &client.stream;
                 if client.is_connected && *addr != sender {
-                    if let Ok(msg) = String::from_utf8(msg.clone()) {
+                    if let Ok(msg) = String::from_utf8(msg.to_owned()) {
                         if let Err(e) = writeln!(stream.as_ref(), "{:?}: {:?}", from.name, msg) {
                             error!("ERROR: Could not send message to client: {e}");
                             closed_streams.push(*addr);
@@ -133,7 +129,7 @@ impl Server {
 
     fn is_allowed_to_send_msg(&mut self, sender: &SocketAddr) -> Result<bool, Box<dyn Error>> {
         let now = SystemTime::now();
-        match self.ban_list.get(&sender) {
+        match self.ban_list.get(sender) {
             Some(banned_at) => {
                 let time_passed = now
                     .duration_since(*banned_at)
@@ -153,14 +149,14 @@ impl Server {
                             warn!("Client not present in chat");
                         }
                     }
-                    return Ok(false);
+                    Ok(false)
                 } else {
                     info!("INFO: Client {} is no longer banned.", sender);
                     if let Some(client) = self.clients.get_mut(sender) {
                         client.msg_strikes = 0;
                     }
                     self.ban_list.remove(sender);
-                    return Ok(true);
+                    Ok(true)
                 }
             }
             None => {
@@ -177,13 +173,13 @@ impl Server {
                                 0..=1 => {
                                     info!("Client {sender} got striked");
                                     client.msg_strikes += 1;
-                                    return Ok(true);
+                                    Ok(true)
                                 }
                                 2 => {
                                     client.msg_strikes += 1;
                                     self.ban_list.insert(*sender, now);
                                     writeln!(client.stream.as_ref(), "You are banned. LOL!")?;
-                                    return Ok(false);
+                                    Ok(false)
                                 }
                                 num => {
                                     panic!("Number of strikes exceeds valid number. {num}");
@@ -191,12 +187,12 @@ impl Server {
                             }
                         } else {
                             client.last_message = now;
-                            return Ok(true);
+                            Ok(true)
                         }
                     }
                     None => {
                         debug!("Client not present in map {sender}");
-                        return Ok(false);
+                        Ok(false)
                     }
                 }
             }
@@ -243,7 +239,7 @@ impl Server {
                     let addr = stream.peer_addr().unwrap();
                     match self.clients.get_mut(&addr) {
                         Some(client) => {
-                            if is_ddos(&now, &client) {
+                            if is_ddos(&now, client) {
                                 client.conn_strikes += 1;
                             }
                             if client.conn_strikes > 3 {
@@ -312,7 +308,7 @@ impl Server {
 }
 
 fn authenticate(stream: &Arc<TcpStream>, expected_token: &Vec<u8>) -> Result<bool, Box<dyn Error>> {
-    stream.as_ref().write(b"Token: ")?;
+    stream.as_ref().write_all(b"Token: ")?;
     let mut token: Vec<u8> = vec![0; 17];
     let n = stream.as_ref().read(&mut token)?;
     let token: Vec<u8> = token
@@ -334,7 +330,7 @@ fn authenticate(stream: &Arc<TcpStream>, expected_token: &Vec<u8>) -> Result<boo
 fn generate_token() -> String {
     let mut bytes = [0; 8];
     rand::thread_rng().fill_bytes(&mut bytes);
-    info!("{}", hex::encode(&bytes).to_ascii_uppercase());
+    info!("{}", hex::encode(bytes).to_ascii_uppercase());
     hex::encode(bytes).to_ascii_uppercase()
 }
 
