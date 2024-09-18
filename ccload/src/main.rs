@@ -137,7 +137,7 @@ async fn send_requests(id: usize, num_request: usize, url: String) -> LoadResult
     result.max_ttlb = *ttlbs.iter().max().expect("No max value calculated");
     result.min_ttlb = *ttlbs.iter().min().expect("No min value calculated");
     result.mean_ttlb = result.total_ttlb.div_f32(num_request as f32);
-    return result;
+    result
 }
 
 #[tokio::main]
@@ -145,22 +145,16 @@ async fn main() {
     let args = Args::parse();
     let url = args.url;
 
-    let num_request = match args.n {
-        Some(n) => n,
-        None => 1,
-    };
-    let num_threads = match args.c {
-        Some(num_threads) => num_threads,
-        None => 1,
-    };
+    let num_request = args.n.unwrap_or(1);
+    let num_threads = args.c.unwrap_or(1);
     assert!(num_request >= num_threads);
-    let num_req_per_thread = num_request.clone() / num_threads.clone();
+    let num_req_per_thread = num_request / num_threads;
     let mut set = JoinSet::new();
     for id in 0..num_threads {
         let url_clone = url.clone();
         set.spawn(async move {
-            let res = send_requests(id, num_req_per_thread, url_clone).await;
-            res
+            
+            send_requests(id, num_req_per_thread, url_clone).await
         });
     }
 
